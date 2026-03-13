@@ -1,0 +1,40 @@
+name: aadith_sai_billing_mobile
+description: "Aadith Sai Cloud Billing Mobile App"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.8.1
+  dio: ^5.8.0+1
+  flutter_secure_storage: ^9.2.2
+  hive_flutter: ^1.1.0
+  intl: ^0.20.2
+  shared_preferences: ^2.5.3
+  connectivity_plus: ^6.1.4
+  local_auth: ^2.3.0
+  firebase_messaging: ^15.2.4
+  flutter_local_notifications: ^19.0.0
+  cached_network_image: ^3.4.1
+  url_launcher: ^6.3.2
+  flutter_dotenv: ^5.2.1
+  fl_chart: ^0.69.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+    - assets/icons/
+    - assets/fonts/
