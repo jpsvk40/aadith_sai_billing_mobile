@@ -12,15 +12,20 @@ class OrderRepository {
     int page = 1,
     int limit = 20,
   }) async {
-    final data = await _client.get(ApiConstants.orders, queryParams: {
-      if (status != null) 'status': status,
-      if (search != null && search.isNotEmpty) 'search': search,
-      'page': page,
-      'limit': limit,
-    });
+    final data = await _client.get(
+      ApiConstants.orders,
+      queryParams: {
+        if (status != null) 'status': status,
+        if (search != null && search.isNotEmpty) 'search': search,
+        'page': page,
+        'limit': limit,
+      },
+    );
     final list = data['orders'] ?? data['data'] ?? data;
     if (list is List) {
-      return list.map((e) => Order.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Order.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     return [];
   }
@@ -32,6 +37,14 @@ class OrderRepository {
 
   Future<Order> createOrder(Map<String, dynamic> orderData) async {
     final data = await _client.post(ApiConstants.orders, data: orderData);
+    return Order.fromJson(data['order'] ?? data);
+  }
+
+  Future<Order> updateOrder(String id, Map<String, dynamic> orderData) async {
+    final data = await _client.put(
+      ApiConstants.orderDetail(id),
+      data: orderData,
+    );
     return Order.fromJson(data['order'] ?? data);
   }
 }

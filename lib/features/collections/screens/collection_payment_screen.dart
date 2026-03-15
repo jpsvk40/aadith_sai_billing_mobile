@@ -10,18 +10,26 @@ import '../../../widgets/common/app_text_field.dart';
 
 class CollectionPaymentScreen extends ConsumerStatefulWidget {
   final String collectionId;
-  const CollectionPaymentScreen({super.key, required this.collectionId});
+  final bool isCorrection;
+  const CollectionPaymentScreen({
+    super.key,
+    required this.collectionId,
+    this.isCorrection = false,
+  });
 
   @override
-  ConsumerState<CollectionPaymentScreen> createState() => _CollectionPaymentScreenState();
+  ConsumerState<CollectionPaymentScreen> createState() =>
+      _CollectionPaymentScreenState();
 }
 
-class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScreen> {
+class _CollectionPaymentScreenState
+    extends ConsumerState<CollectionPaymentScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _paymentDateController = TextEditingController();
   final _referenceController = TextEditingController();
   final _remarksController = TextEditingController();
+  final _correctionForController = TextEditingController();
   String _paymentMode = 'Cash';
   bool _isLoading = false;
 
@@ -30,7 +38,10 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
   @override
   void initState() {
     super.initState();
-    _paymentDateController.text = DateTime.now().toIso8601String().split('T').first;
+    _paymentDateController.text = DateTime.now()
+        .toIso8601String()
+        .split('T')
+        .first;
   }
 
   @override
@@ -39,6 +50,7 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
     _paymentDateController.dispose();
     _referenceController.dispose();
     _remarksController.dispose();
+    _correctionForController.dispose();
     super.dispose();
   }
 
@@ -46,23 +58,48 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      await CollectionRepository(client).recordCollectionPayment(widget.collectionId, {
+      final client = ApiClient.getInstance(
+        onUnauthorized: () => ref.read(authProvider.notifier).logout(),
+      );
+      final repository = CollectionRepository(client);
+      final payload = {
         'amount': double.parse(_amountController.text.trim()),
         'receivedDate': _paymentDateController.text.trim(),
         'paymentMode': _paymentMode,
         'referenceNo': _referenceController.text.trim(),
         'remarks': _remarksController.text.trim(),
-      });
+        if (_correctionForController.text.trim().isNotEmpty)
+          'correctionForId': int.tryParse(_correctionForController.text.trim()),
+      };
+      if (widget.isCorrection) {
+        await repository.recordCollectionCorrection(
+          widget.collectionId,
+          payload,
+        );
+      } else {
+        await repository.recordCollectionPayment(widget.collectionId, payload);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment recorded successfully'), backgroundColor: AppColors.success),
+        SnackBar(
+          content: Text(
+            widget.isCorrection
+                ? 'Correction saved successfully'
+                : 'Payment recorded successfully',
+          ),
+          backgroundColor: widget.isCorrection
+              ? AppColors.warning
+              : AppColors.success,
+        ),
       );
       context.go('/collections/${widget.collectionId}');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: AppColors.danger),
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppColors.danger,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -72,18 +109,57 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Record Collection')),
+      appBar: AppBar(
+        title: Text(
+          widget.isCorrection
+              ? 'Add Collection Correction'
+              : 'Record Collection',
+        ),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            if (widget.isCorrection)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warningLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Enter the correction amount as a normal positive value. The app will send it as a negative correction entry in the backend.',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+              ),
             AppTextField(
-              label: 'Amount Collected (Rs.)',
+              label: widget.isCorrection
+                  ? 'Correction Amount (Rs.)'
+                  : 'Amount Collected (Rs.)',
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              validator: (v) => Validators.positiveNumber(v, 'Amount'),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              validator: (v) {
+                final base = Validators.positiveNumber(v, 'Amount');
+                if (base != null) return base;
+                if (widget.isCorrection &&
+                    _remarksController.text.trim().isEmpty) {
+                  return 'Remarks are required for corrections';
+                }
+                return null;
+              },
             ),
+            if (widget.isCorrection) ...[
+              const SizedBox(height: 16),
+              AppTextField(
+                label: 'Original Payment Entry ID (Optional)',
+                controller: _correctionForController,
+                keyboardType: TextInputType.number,
+              ),
+            ],
             const SizedBox(height: 16),
             AppTextField(
               label: 'Received Date',
@@ -95,8 +171,13 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
             DropdownButtonFormField<String>(
               initialValue: _paymentMode,
               decoration: const InputDecoration(labelText: 'Payment Mode'),
-              items: _paymentModes.map((mode) => DropdownMenuItem(value: mode, child: Text(mode))).toList(),
-              onChanged: (value) => setState(() => _paymentMode = value ?? 'Cash'),
+              items: _paymentModes
+                  .map(
+                    (mode) => DropdownMenuItem(value: mode, child: Text(mode)),
+                  )
+                  .toList(),
+              onChanged: (value) =>
+                  setState(() => _paymentMode = value ?? 'Cash'),
             ),
             const SizedBox(height: 16),
             AppTextField(
@@ -105,7 +186,9 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
             ),
             const SizedBox(height: 16),
             AppTextField(
-              label: 'Remarks (Optional)',
+              label: widget.isCorrection
+                  ? 'Correction Remarks *'
+                  : 'Remarks (Optional)',
               controller: _remarksController,
               maxLines: 3,
             ),
@@ -113,8 +196,19 @@ class _CollectionPaymentScreenState extends ConsumerState<CollectionPaymentScree
             ElevatedButton(
               onPressed: _isLoading ? null : _submit,
               child: _isLoading
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-                  : const Text('Record Collection'),
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: AppColors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      widget.isCorrection
+                          ? 'Save Correction'
+                          : 'Record Collection',
+                    ),
             ),
           ],
         ),

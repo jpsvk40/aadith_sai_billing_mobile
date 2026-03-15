@@ -6,14 +6,19 @@ class CollectionRepository {
   final ApiClient _client;
   CollectionRepository(this._client);
 
-  Future<List<Collection>> getCollections({int page = 1, int limit = 20}) async {
-    final data = await _client.get(ApiConstants.collections, queryParams: {
-      'page': page,
-      'limit': limit,
-    });
+  Future<List<Collection>> getCollections({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final data = await _client.get(
+      ApiConstants.collections,
+      queryParams: {'page': page, 'limit': limit},
+    );
     final list = data['collections'] ?? data['data'] ?? data;
     if (list is List) {
-      return list.map((e) => Collection.fromJson(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => Collection.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     return [];
   }
@@ -23,7 +28,20 @@ class CollectionRepository {
     return Collection.fromJson(data['collection'] ?? data);
   }
 
-  Future<void> recordCollectionPayment(String id, Map<String, dynamic> paymentData) async {
+  Future<void> recordCollectionPayment(
+    String id,
+    Map<String, dynamic> paymentData,
+  ) async {
     await _client.post(ApiConstants.collectionPayment(id), data: paymentData);
+  }
+
+  Future<void> recordCollectionCorrection(
+    String id,
+    Map<String, dynamic> correctionData,
+  ) async {
+    await _client.post(
+      ApiConstants.collectionCorrection(id),
+      data: correctionData,
+    );
   }
 }

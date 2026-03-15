@@ -4,6 +4,9 @@ class CollectionPayment {
   final String paymentMode;
   final String? notes;
   final DateTime? paymentDate;
+  final String entryType;
+  final String? correctionReason;
+  final String? correctionForId;
 
   const CollectionPayment({
     required this.id,
@@ -11,6 +14,9 @@ class CollectionPayment {
     required this.paymentMode,
     this.notes,
     this.paymentDate,
+    this.entryType = 'payment',
+    this.correctionReason,
+    this.correctionForId,
   });
 
   factory CollectionPayment.fromJson(Map<String, dynamic> json) {
@@ -19,9 +25,14 @@ class CollectionPayment {
       amount: double.tryParse(json['amount']?.toString() ?? '0') ?? 0,
       paymentMode: json['paymentMode'] ?? 'Cash',
       notes: json['remarks'] ?? json['customerFeedback'] ?? json['notes'],
+      entryType: json['entryType']?.toString() ?? 'payment',
+      correctionReason: json['correctionReason']?.toString(),
+      correctionForId: json['correctionForId']?.toString(),
       paymentDate: json['receivedDate'] != null
           ? DateTime.tryParse(json['receivedDate'].toString())
-          : (json['paymentDate'] != null ? DateTime.tryParse(json['paymentDate'].toString()) : null),
+          : (json['paymentDate'] != null
+                ? DateTime.tryParse(json['paymentDate'].toString())
+                : null),
     );
   }
 }
@@ -34,6 +45,7 @@ class Collection {
   final String? representativeName;
   final double totalOutstanding;
   final double? collectedAmount;
+  final double balanceAmount;
   final String status;
   final DateTime? assignedDate;
   final DateTime? dueDate;
@@ -47,6 +59,7 @@ class Collection {
     this.representativeName,
     required this.totalOutstanding,
     this.collectedAmount,
+    required this.balanceAmount,
     required this.status,
     this.assignedDate,
     this.dueDate,
@@ -56,20 +69,49 @@ class Collection {
   factory Collection.fromJson(Map<String, dynamic> json) {
     return Collection(
       id: json['id']?.toString() ?? '',
-      customerId: json['invoice']?['customer']?['id']?.toString() ?? json['customerId']?.toString(),
-      customerName: json['invoice']?['customer']?['customerName'] ?? json['customer']?['customerName'] ?? json['customerName'],
-      representativeId: json['collectionRepId']?.toString() ?? json['representativeId']?.toString(),
-      representativeName: json['collectionRep']?['name'] ?? json['representative']?['name'] ?? json['representativeName'],
-      totalOutstanding: double.tryParse(json['balanceAmount']?.toString() ?? json['totalAmount']?.toString() ?? json['totalOutstanding']?.toString() ?? '0') ?? 0,
-      collectedAmount: double.tryParse(json['collectedAmount']?.toString() ?? '0'),
+      customerId:
+          json['invoice']?['customer']?['id']?.toString() ??
+          json['customerId']?.toString(),
+      customerName:
+          json['invoice']?['customer']?['customerName'] ??
+          json['customer']?['customerName'] ??
+          json['customerName'],
+      representativeId:
+          json['collectionRepId']?.toString() ??
+          json['representativeId']?.toString(),
+      representativeName:
+          json['collectionRep']?['name'] ??
+          json['representative']?['name'] ??
+          json['representativeName'],
+      totalOutstanding:
+          double.tryParse(
+            json['totalAmount']?.toString() ??
+                json['totalOutstanding']?.toString() ??
+                json['balanceAmount']?.toString() ??
+                '0',
+          ) ??
+          0,
+      collectedAmount: double.tryParse(
+        json['collectedAmount']?.toString() ?? '0',
+      ),
+      balanceAmount:
+          double.tryParse(json['balanceAmount']?.toString() ?? '0') ?? 0,
       status: json['status'] ?? 'Pending',
       assignedDate: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
-          : (json['assignedDate'] != null ? DateTime.tryParse(json['assignedDate'].toString()) : null),
-      dueDate: json['dueDate'] != null ? DateTime.tryParse(json['dueDate'].toString()) : null,
-      payments: (json['payments'] as List<dynamic>?)
-          ?.map((e) => CollectionPayment.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
+          : (json['assignedDate'] != null
+                ? DateTime.tryParse(json['assignedDate'].toString())
+                : null),
+      dueDate: json['dueDate'] != null
+          ? DateTime.tryParse(json['dueDate'].toString())
+          : null,
+      payments:
+          (json['payments'] as List<dynamic>?)
+              ?.map(
+                (e) => CollectionPayment.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          [],
     );
   }
 }

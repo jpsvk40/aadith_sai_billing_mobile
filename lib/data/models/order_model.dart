@@ -3,6 +3,8 @@ class OrderItem {
   final String? productId;
   final String? productName;
   final double quantity;
+  final double? confirmedQuantity;
+  final String? customerRemark;
   final double rate;
   final String? unit;
   final String? discountType;
@@ -15,6 +17,8 @@ class OrderItem {
     this.productId,
     this.productName,
     required this.quantity,
+    this.confirmedQuantity,
+    this.customerRemark,
     required this.rate,
     this.unit,
     this.discountType,
@@ -27,14 +31,33 @@ class OrderItem {
     return OrderItem(
       id: json['id']?.toString(),
       productId: json['productId']?.toString(),
-      productName: json['product']?['productName'] ?? json['productNameSnapshot'] ?? json['productName'],
+      productName:
+          json['product']?['productName'] ??
+          json['productNameSnapshot'] ??
+          json['productName'],
       quantity: double.tryParse(json['quantity']?.toString() ?? '0') ?? 0,
-      rate: double.tryParse(json['rate']?.toString() ?? json['price']?.toString() ?? '0') ?? 0,
+      confirmedQuantity: json['confirmedQuantity'] != null
+          ? double.tryParse(json['confirmedQuantity'].toString())
+          : null,
+      customerRemark: json['customerRemark']?.toString(),
+      rate:
+          double.tryParse(
+            json['rate']?.toString() ?? json['price']?.toString() ?? '0',
+          ) ??
+          0,
       unit: json['unit']?.toString(),
       discountType: json['discountType']?.toString(),
-      discountValue: double.tryParse(json['discountValue']?.toString() ?? json['discount']?.toString() ?? '0'),
-      taxPercent: double.tryParse(json['taxPercent']?.toString() ?? json['taxRate']?.toString() ?? '0'),
-      total: double.tryParse(json['lineTotal']?.toString() ?? json['total']?.toString() ?? '0'),
+      discountValue: double.tryParse(
+        json['discountValue']?.toString() ??
+            json['discount']?.toString() ??
+            '0',
+      ),
+      taxPercent: double.tryParse(
+        json['taxPercent']?.toString() ?? json['taxRate']?.toString() ?? '0',
+      ),
+      total: double.tryParse(
+        json['lineTotal']?.toString() ?? json['total']?.toString() ?? '0',
+      ),
     );
   }
 }
@@ -68,26 +91,44 @@ class Order {
     this.items = const [],
   });
 
+  bool get canReviewFinalQuantity =>
+      ['New', 'Production Completed', 'Packed'].contains(status);
+
   factory Order.fromJson(Map<String, dynamic> json) {
     return Order(
       id: json['id']?.toString() ?? '',
-      orderNumber: json['orderNo'] ?? json['orderNumber'] ?? json['id']?.toString() ?? '',
+      orderNumber:
+          json['orderNo'] ??
+          json['orderNumber'] ??
+          json['id']?.toString() ??
+          '',
       status: json['status'] ?? 'New',
       customerId: json['customerId']?.toString(),
       customerName: json['customer']?['customerName'] ?? json['customerName'],
       representativeId: json['representativeId']?.toString(),
-      representativeName: json['representative']?['name'] ?? json['representativeName'],
-      totalAmount: double.tryParse(json['grandTotal']?.toString() ?? json['totalAmount']?.toString() ?? '0'),
+      representativeName:
+          json['representative']?['name'] ?? json['representativeName'],
+      totalAmount: double.tryParse(
+        json['grandTotal']?.toString() ??
+            json['totalAmount']?.toString() ??
+            '0',
+      ),
       notes: json['notes'],
       createdAt: json['orderDate'] != null
           ? DateTime.tryParse(json['orderDate'].toString())
-          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null),
+          : (json['createdAt'] != null
+                ? DateTime.tryParse(json['createdAt'].toString())
+                : null),
       deliveryDate: json['expectedDeliveryDate'] != null
           ? DateTime.tryParse(json['expectedDeliveryDate'].toString())
-          : (json['deliveryDate'] != null ? DateTime.tryParse(json['deliveryDate'].toString()) : null),
-      items: ((json['orderItems'] ?? json['items']) as List<dynamic>?)
-          ?.map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
+          : (json['deliveryDate'] != null
+                ? DateTime.tryParse(json['deliveryDate'].toString())
+                : null),
+      items:
+          ((json['orderItems'] ?? json['items']) as List<dynamic>?)
+              ?.map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }

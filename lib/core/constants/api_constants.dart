@@ -33,6 +33,8 @@ class ApiConstants {
   static const String collections = '/api/collections';
   static String collectionDetail(String id) => '/api/collections/$id';
   static String collectionPayment(String id) => '/api/collections/$id/payment';
+  static String collectionCorrection(String id) =>
+      '/api/collections/$id/correction';
 
   // Commissions
   static const String commissions = '/api/rep-commissions';

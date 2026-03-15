@@ -33,47 +33,81 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
-    redirect: (context, state) => redirectForAuthState(authState, state.matchedLocation),
+    redirect: (context, state) =>
+        redirectForAuthState(authState, state.matchedLocation),
     routes: [
       GoRoute(path: '/splash', builder: (c, s) => const SplashScreen()),
       GoRoute(path: '/login', builder: (c, s) => const LoginScreen()),
-      GoRoute(path: '/forgot-password', builder: (c, s) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (c, s) => const ForgotPasswordScreen(),
+      ),
       GoRoute(
         path: '/reset-password',
-        builder: (c, s) => ResetPasswordScreen(initialToken: s.uri.queryParameters['token']),
+        builder: (c, s) =>
+            ResetPasswordScreen(initialToken: s.uri.queryParameters['token']),
       ),
-      GoRoute(path: '/unauthorized', builder: (c, s) => const UnauthorizedScreen()),
+      GoRoute(
+        path: '/unauthorized',
+        builder: (c, s) => const UnauthorizedScreen(),
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AppBottomNavBar(child: child),
         routes: [
-          GoRoute(path: '/dashboard', builder: (c, s) => const DashboardScreen()),
+          GoRoute(
+            path: '/dashboard',
+            builder: (c, s) => const DashboardScreen(),
+          ),
           GoRoute(path: '/orders', builder: (c, s) => const OrderListScreen()),
-          GoRoute(path: '/orders/create', builder: (c, s) => const OrderCreateScreen()),
+          GoRoute(
+            path: '/orders/create',
+            builder: (c, s) => const OrderCreateScreen(),
+          ),
           GoRoute(
             path: '/orders/:id',
-            builder: (c, s) => OrderDetailScreen(orderId: s.pathParameters['id']!),
+            builder: (c, s) =>
+                OrderDetailScreen(orderId: s.pathParameters['id']!),
           ),
-          GoRoute(path: '/invoices', builder: (c, s) => const InvoiceListScreen()),
+          GoRoute(
+            path: '/invoices',
+            builder: (c, s) => const InvoiceListScreen(),
+          ),
           GoRoute(
             path: '/invoices/:id',
-            builder: (c, s) => InvoiceDetailScreen(invoiceId: s.pathParameters['id']!),
+            builder: (c, s) =>
+                InvoiceDetailScreen(invoiceId: s.pathParameters['id']!),
           ),
-          GoRoute(path: '/payments', builder: (c, s) => const PaymentListScreen()),
+          GoRoute(
+            path: '/payments',
+            builder: (c, s) => const PaymentListScreen(),
+          ),
           GoRoute(
             path: '/payments/record',
-            builder: (c, s) => RecordPaymentScreen(initialInvoiceId: s.uri.queryParameters['invoiceId']),
+            builder: (c, s) => RecordPaymentScreen(
+              initialInvoiceId: s.uri.queryParameters['invoiceId'],
+            ),
           ),
-          GoRoute(path: '/collections', builder: (c, s) => const CollectionListScreen()),
+          GoRoute(
+            path: '/collections',
+            builder: (c, s) => const CollectionListScreen(),
+          ),
           GoRoute(
             path: '/collections/:id',
-            builder: (c, s) => CollectionDetailScreen(collectionId: s.pathParameters['id']!),
+            builder: (c, s) =>
+                CollectionDetailScreen(collectionId: s.pathParameters['id']!),
           ),
           GoRoute(
             path: '/collections/:id/payment',
-            builder: (c, s) => CollectionPaymentScreen(collectionId: s.pathParameters['id']!),
+            builder: (c, s) => CollectionPaymentScreen(
+              collectionId: s.pathParameters['id']!,
+              isCorrection: s.uri.queryParameters['mode'] == 'correction',
+            ),
           ),
-          GoRoute(path: '/commissions', builder: (c, s) => const CommissionScreen()),
+          GoRoute(
+            path: '/commissions',
+            builder: (c, s) => const CommissionScreen(),
+          ),
           GoRoute(path: '/alerts', builder: (c, s) => const AlertsScreen()),
           GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
         ],
