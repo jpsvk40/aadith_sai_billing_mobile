@@ -42,8 +42,10 @@ workflows:
       flutter: stable
       xcode: latest
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.aadithsai.aadithSaiBillingMobile
+        certificates:
+          - aadith sai billing
+        provisioning_profiles:
+          - aadith-sai-billing-profile
     triggering:
       branch_patterns:
         - pattern: main
