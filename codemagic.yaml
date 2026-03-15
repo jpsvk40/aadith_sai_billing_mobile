@@ -69,10 +69,10 @@ workflows:
           flutter test
       - name: Set up code signing
         script: |
-          xcode-project use-profiles --workspace ios/Runner.xcworkspace --scheme Runner
+          xcode-project use-profiles
       - name: Build IPA
         script: |
-          xcode-project build-ipa --workspace ios/Runner.xcworkspace --scheme Runner
+          xcode-project build-ipa --project ios/Runner.xcodeproj --scheme Runner
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
