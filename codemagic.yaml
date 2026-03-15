@@ -42,10 +42,8 @@ workflows:
       flutter: stable
       xcode: latest
       ios_signing:
-        provisioning_profiles:
-          - aadithsai.aadithSaiBillingMobile
-        certificates:
-          - aadith sai billing
+        distribution_type: app_store
+        bundle_identifier: com.aadithsai.aadithSaiBillingMobile
     triggering:
       branch_patterns:
         - pattern: main
@@ -70,36 +68,9 @@ workflows:
       - name: Set up code signing
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
-      - name: Create export options plist
-        script: |
-          cat > /Users/builder/export_options.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>teamID</key>
-            <string>DZPXVJD63W</string>
-            <key>signingCertificate</key>
-            <string>Apple Distribution</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.aadithsai.aadithSaiBillingMobile</key>
-              <string>aadith sai billing</string>
-            </dict>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>compileBitcode</key>
-            <false/>
-          </dict>
-          </plist>
-          EOF
       - name: Build IPA
         script: |
-          flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
+          flutter build ipa --release
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
