@@ -13,6 +13,12 @@ workflows:
           include: true
           source: true
     scripts:
+      - name: Prepare environment file
+        script: |
+          cat > .env <<EOF
+          API_BASE_URL=${API_BASE_URL:-https://aadith-sai-billing-cloud-4g5n.onrender.com}
+          APP_NAME=${APP_NAME:-Aadith Sai Billing}
+          EOF
       - name: Get Flutter packages
         script: |
           flutter pub get
@@ -48,6 +54,12 @@ workflows:
           include: true
           source: true
     scripts:
+      - name: Prepare environment file
+        script: |
+          cat > .env <<EOF
+          API_BASE_URL=${API_BASE_URL:-https://aadith-sai-billing-cloud-4g5n.onrender.com}
+          APP_NAME=${APP_NAME:-Aadith Sai Billing}
+          EOF
       - name: Get Flutter packages
         script: |
           flutter pub get
