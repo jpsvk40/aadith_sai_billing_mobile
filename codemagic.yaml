@@ -88,7 +88,7 @@ workflows:
             <key>provisioningProfiles</key>
             <dict>
               <key>com.aadithsai.aadithSaiBillingMobile</key>
-              <string>aadithsai.aadithSaiBillingMobile</string>
+              <string>aadith sai billing</string>
             </dict>
             <key>stripSwiftSymbols</key>
             <true/>
