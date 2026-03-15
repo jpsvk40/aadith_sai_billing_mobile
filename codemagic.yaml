@@ -38,8 +38,6 @@ workflows:
     name: iOS TestFlight
     max_build_duration: 90
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: codemagic-app-store-connect
     environment:
       flutter: stable
       xcode: latest
