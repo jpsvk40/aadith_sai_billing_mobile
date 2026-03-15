@@ -47,8 +47,6 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.aadithsai.aadithSaiBillingMobile
     triggering:
-      events:
-        - manual
       branch_patterns:
         - pattern: main
           include: true
