@@ -43,7 +43,7 @@ workflows:
       xcode: latest
       ios_signing:
         provisioning_profiles:
-          - aadith sai billing
+          - aadithsai.aadithSaiBillingMobile
         certificates:
           - aadith sai billing
     triggering:
