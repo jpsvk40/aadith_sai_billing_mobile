@@ -2,10 +2,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   static String get baseUrl {
-    final envUrl = dotenv.maybeGet('API_BASE_URL');
-    return (envUrl != null && envUrl.isNotEmpty)
-        ? envUrl
-        : 'https://aadith-sai-billing-cloud-4g5n.onrender.com';
+    try {
+      final envUrl = dotenv.maybeGet('API_BASE_URL');
+      return (envUrl != null && envUrl.isNotEmpty)
+          ? envUrl
+          : 'https://aadith-sai-billing-cloud-4g5n.onrender.com';
+    } catch (_) {
+      return 'https://aadith-sai-billing-cloud-4g5n.onrender.com';
+    }
   }
 
   // Auth
