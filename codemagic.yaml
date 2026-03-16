@@ -38,6 +38,8 @@ workflows:
     name: iOS TestFlight
     max_build_duration: 90
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: aadith-appstore
     environment:
       flutter: stable
       xcode: latest
@@ -82,8 +84,7 @@ workflows:
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
-        apple_id: $APP_STORE_CONNECT_APPLE_ID
-        password: $APP_STORE_CONNECT_APP_SPECIFIC_PASSWORD
+        auth: integration
         submit_to_testflight: true
         beta_groups:
           - Internal Testers
