@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 
 final class RootFlutterViewController: FlutterViewController {
+  private let diagnosticsChannelName = "aadith_sai_billing_mobile/startup_diagnostics"
   private var statusLabel: UILabel?
 
   override func viewDidLoad() {
@@ -31,9 +32,30 @@ final class RootFlutterViewController: FlutterViewController {
 
     statusLabel = label
 
+    let channel = FlutterMethodChannel(
+      name: diagnosticsChannelName,
+      binaryMessenger: binaryMessenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "startupState" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+
+      if let args = call.arguments as? [String: Any],
+         let message = args["message"] as? String {
+        DispatchQueue.main.async {
+          self?.statusLabel?.text = message
+        }
+      }
+      result(nil)
+    }
+
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
       guard let self = self else { return }
-      self.statusLabel?.text = "Flutter still has not painted after 5 seconds.\nPlease report this screen."
+      if self.statusLabel?.text == "Native iOS host loaded.\nWaiting for Flutter UI..." {
+        self.statusLabel?.text = "Dart/Flutter has not reported startup after 5 seconds.\nPlease report this screen."
+      }
     }
   }
 }
