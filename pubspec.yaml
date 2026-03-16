@@ -1,7 +1,7 @@
 name: aadith_sai_billing_mobile
 description: "Aadith Sai Cloud Billing Mobile App"
 publish_to: 'none'
-version: 1.0.0+5
+version: 1.0.0+6
 
 environment:
   sdk: ^3.11.1
