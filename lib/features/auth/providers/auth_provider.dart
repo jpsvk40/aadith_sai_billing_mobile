@@ -4,6 +4,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/network/api_client.dart';
 import '../../../data/local/secure_storage.dart';
 import '../../../data/local/cache_storage.dart';
+import '../../../core/utils/startup_diagnostics.dart';
 import 'dart:convert';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
@@ -45,10 +46,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> checkSession() async {
+    StartupDiagnostics.reportAsync('checkSession started');
     state = state.copyWith(status: AuthStatus.loading);
     try {
       final token = await SecureStorage.getToken();
       if (token == null) {
+        StartupDiagnostics.reportAsync('checkSession: no token');
         state = state.copyWith(status: AuthStatus.unauthenticated);
         return;
       }
@@ -56,15 +59,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final cached = CacheStorage.getString('auth_user');
       if (cached != null) {
         final user = AuthUser.fromJson(jsonDecode(cached));
+        StartupDiagnostics.reportAsync('checkSession: restored cached user');
         state = AuthState(status: AuthStatus.authenticated, user: user);
       }
       // Then refresh from API
       final user = await _repo.getMe();
       await CacheStorage.setString('auth_user', jsonEncode(user.toJson()));
+      StartupDiagnostics.reportAsync('checkSession: refreshed user from API');
       state = AuthState(status: AuthStatus.authenticated, user: user);
     } catch (e) {
       await SecureStorage.deleteToken();
       await CacheStorage.clear();
+      StartupDiagnostics.reportAsync('checkSession failed: $e');
       state = AuthState(status: AuthStatus.unauthenticated, error: e.toString());
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/utils/startup_diagnostics.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../features/auth/screens/forgot_password_screen.dart';
 import '../features/auth/screens/login_screen.dart';
@@ -29,12 +30,20 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
+  StartupDiagnostics.reportAsync(
+    'Creating router: auth=${authState.status.name}',
+  );
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
-    redirect: (context, state) =>
-        redirectForAuthState(authState, state.matchedLocation),
+    redirect: (context, state) {
+      final target = redirectForAuthState(authState, state.matchedLocation);
+      StartupDiagnostics.reportAsync(
+        'Router redirect: from=${state.matchedLocation} to=${target ?? 'stay'} auth=${authState.status.name}',
+      );
+      return target;
+    },
     routes: [
       GoRoute(path: '/splash', builder: (c, s) => const SplashScreen()),
       GoRoute(path: '/login', builder: (c, s) => const LoginScreen()),

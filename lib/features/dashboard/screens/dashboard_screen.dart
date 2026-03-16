@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/startup_diagnostics.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
@@ -26,6 +27,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    StartupDiagnostics.reportAsync('Dashboard screen build');
     final state = ref.watch(dashboardProvider);
     final user = ref.watch(authProvider).user;
 

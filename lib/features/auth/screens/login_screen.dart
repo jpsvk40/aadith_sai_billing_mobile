@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/startup_diagnostics.dart';
 import '../../../core/utils/validators.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -35,6 +36,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    StartupDiagnostics.reportAsync('Login screen build');
     final authState = ref.watch(authProvider);
     final isLoading = authState.status == AuthStatus.loading;
 

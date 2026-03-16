@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'app.dart';
+import 'core/utils/startup_diagnostics.dart';
 import 'data/local/cache_storage.dart';
 
 void main() {
@@ -22,9 +22,6 @@ class BootstrapApp extends StatefulWidget {
 }
 
 class _BootstrapAppState extends State<BootstrapApp> {
-  static const _nativeDiagnostics = MethodChannel(
-    'aadith_sai_billing_mobile/startup_diagnostics',
-  );
   bool _ready = false;
   String _stage = 'Starting app...';
   String? _error;
@@ -32,22 +29,14 @@ class _BootstrapAppState extends State<BootstrapApp> {
   @override
   void initState() {
     super.initState();
-    unawaited(_notifyNative('Bootstrap widget created'));
+    StartupDiagnostics.reportAsync('Bootstrap widget created');
     unawaited(_initialize());
-  }
-
-  Future<void> _notifyNative(String message) async {
-    try {
-      await _nativeDiagnostics.invokeMethod('startupState', {'message': message});
-    } catch (_) {
-      // Ignore if the native side is not ready.
-    }
   }
 
   Future<void> _initialize() async {
     try {
       setState(() => _stage = 'Loading configuration...');
-      unawaited(_notifyNative(_stage));
+      StartupDiagnostics.reportAsync(_stage);
       try {
         await dotenv.load(fileName: '.env').timeout(const Duration(seconds: 5));
       } catch (_) {
@@ -55,11 +44,11 @@ class _BootstrapAppState extends State<BootstrapApp> {
       }
 
       setState(() => _stage = 'Preparing local storage...');
-      unawaited(_notifyNative(_stage));
+      StartupDiagnostics.reportAsync(_stage);
       await Hive.initFlutter().timeout(const Duration(seconds: 10));
 
       setState(() => _stage = 'Loading app cache...');
-      unawaited(_notifyNative(_stage));
+      StartupDiagnostics.reportAsync(_stage);
       await CacheStorage.init().timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
@@ -67,13 +56,13 @@ class _BootstrapAppState extends State<BootstrapApp> {
         _ready = true;
         _stage = 'Ready';
       });
-      unawaited(_notifyNative('Flutter app ready'));
+      StartupDiagnostics.reportAsync('Flutter app ready');
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
       });
-      unawaited(_notifyNative('Startup error: $_error'));
+      StartupDiagnostics.reportAsync('Startup error: $_error');
     }
   }
 
