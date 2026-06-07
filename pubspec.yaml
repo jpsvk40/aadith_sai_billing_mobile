@@ -17,7 +17,6 @@ dependencies:
   hive_flutter: ^1.1.0
   intl: ^0.20.2
   shared_preferences: ^2.5.3
-  connectivity_plus: ^6.1.4
   local_auth: ^2.3.0
   flutter_local_notifications: ^19.0.0
   cached_network_image: ^3.4.1
