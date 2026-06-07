@@ -83,7 +83,10 @@ workflows:
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
             --scheme Runner \
-            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CLANG_ENABLE_EXPLICIT_MODULES=NO SWIFT_ENABLE_EXPLICIT_MODULES=NO"
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CLANG_ENABLE_EXPLICIT_MODULES=NO SWIFT_ENABLE_EXPLICIT_MODULES=NO" \
+          || { echo "================= XCODEBUILD ERRORS ================="; \
+               grep -rhiE "error:|fatal error:|no such module" /tmp/xcodebuild_logs/ 2>/dev/null | sort -u | tail -80; \
+               echo "===================================================="; exit 1; }
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
