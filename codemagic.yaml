@@ -78,6 +78,17 @@ workflows:
         script: |
           cd ios
           pod install
+          echo "===================== POD DIAGNOSTICS ====================="
+          echo "--- Podfile.lock PODS ---"
+          sed -n '/^PODS:/,/^DEPENDENCIES:/p' Podfile.lock || true
+          echo "--- Target Support Files dirs (did image_picker_ios integrate?) ---"
+          ls "Pods/Target Support Files/" 2>/dev/null || echo "(no Target Support Files dir)"
+          echo "--- Pods-Runner.release.xcconfig (search paths the Runner target needs) ---"
+          cat "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig" 2>/dev/null || echo "(MISSING - integration failed)"
+          echo "--- Runner Release FRAMEWORK_SEARCH_PATHS actually resolved ---"
+          cd ..
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -showBuildSettings 2>/dev/null | grep -iE "FRAMEWORK_SEARCH_PATHS|OTHER_CFLAGS =" | head -4 || true
+          echo "=========================================================="
       - name: Build IPA
         script: |
           # Xcode 26's "Explicitly Built Modules" (ScanDependencies) fails compiling
