@@ -42,7 +42,9 @@ workflows:
       app_store_connect: aadith-appstore
     environment:
       flutter: stable
-      xcode: latest
+      # Pinned: Xcode 26.x mis-resolves Flutter plugin framework modules
+      # (@import image_picker_ios / connectivity_plus "module not found").
+      xcode: 16.4
       ios_signing:
         certificates:
           - aadith sai billing
