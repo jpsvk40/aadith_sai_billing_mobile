@@ -8,8 +8,10 @@ import '../../../widgets/common/empty_state_widget.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../../widgets/common/status_badge.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../providers/order_list_provider.dart';
+
+const _orderOrange = Color(0xFFF59E0B);
+const _orderPurple = Color(0xFF7C3AED);
 
 class OrderListScreen extends ConsumerStatefulWidget {
   const OrderListScreen({super.key});
@@ -43,27 +45,76 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
         );
   }
 
+  Widget _summaryCards(OrderListState s) {
+    final total = s.orders.length;
+    final inProd = s.orders.where((o) => o.status == 'In Production').length;
+    final delivered = s.orders.where((o) => o.status == 'Delivered').length;
+    final value = s.orders.fold<double>(0, (a, o) => a + (o.totalAmount ?? 0));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 2.3,
+        children: [
+          _summaryCard('TOTAL ORDERS', '$total', AppColors.primary, Icons.receipt_long_outlined),
+          _summaryCard('IN PRODUCTION', '$inProd', _orderOrange, Icons.build_circle_outlined),
+          _summaryCard('DELIVERED', '$delivered', AppColors.success, Icons.check_circle_outline),
+          _summaryCard('TOTAL VALUE', CurrencyUtils.formatCompact(value), _orderPurple, Icons.account_balance_wallet_outlined),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryCard(String label, String value, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, Color.lerp(color, Colors.black, 0.22)!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.32), blurRadius: 8, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, letterSpacing: 0.3, color: Colors.white.withValues(alpha: 0.85))),
+                const SizedBox(height: 5),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: Colors.white, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(orderListProvider);
-    final canCreateOrder = ref.watch(authProvider).user?.hasModule('orders') == true;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Orders'),
-        actions: canCreateOrder
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => context.go('/orders/create'),
-                ),
-              ]
-            : null,
-      ),
+      appBar: AppBar(title: const Text('Orders')),
       body: Column(
         children: [
+          _summaryCards(state),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(

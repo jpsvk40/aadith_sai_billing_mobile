@@ -7,6 +7,8 @@ import '../../../data/network/api_client.dart';
 import '../../../data/repositories/collection_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../widgets/common/app_text_field.dart';
+import '../providers/collection_detail_provider.dart';
+import '../providers/collection_list_provider.dart';
 
 class CollectionPaymentScreen extends ConsumerStatefulWidget {
   final String collectionId;
@@ -80,12 +82,15 @@ class _CollectionPaymentScreenState
         await repository.recordCollectionPayment(widget.collectionId, payload);
       }
       if (!mounted) return;
+      // Refresh the detail + list so the rep immediately sees the submitted entry.
+      ref.invalidate(collectionDetailProvider(widget.collectionId));
+      ref.read(collectionListProvider.notifier).load();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             widget.isCorrection
-                ? 'Correction saved successfully'
-                : 'Payment recorded successfully',
+                ? 'Correction submitted — awaiting admin approval'
+                : 'Payment submitted — awaiting admin approval',
           ),
           backgroundColor: widget.isCorrection
               ? AppColors.warning
@@ -110,6 +115,10 @@ class _CollectionPaymentScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/collections/${widget.collectionId}'),
+        ),
         title: Text(
           widget.isCorrection
               ? 'Add Collection Correction'

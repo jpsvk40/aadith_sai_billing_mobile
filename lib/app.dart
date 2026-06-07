@@ -14,7 +14,7 @@ class App extends ConsumerWidget {
       final router = ref.watch(appRouterProvider);
       StartupDiagnostics.reportAsync('Router provider resolved');
       return MaterialApp.router(
-        title: 'Aadith Sai Billing',
+        title: 'Aadith Sai Cloud',
         theme: AppTheme.lightTheme,
         routerConfig: router,
         debugShowCheckedModeBanner: false,

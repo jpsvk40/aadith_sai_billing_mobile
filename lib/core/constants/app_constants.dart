@@ -1,5 +1,5 @@
 class AppConstants {
-  static const String appName = 'Aadith Sai Billing';
+  static const String appName = 'Aadith Sai Cloud';
   static const String tokenKey = 'auth_token';
   static const String userKey = 'auth_user';
   static const int connectionTimeout = 30000;

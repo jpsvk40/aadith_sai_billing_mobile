@@ -4,6 +4,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/network/api_client.dart';
 import '../../../data/local/secure_storage.dart';
 import '../../../data/local/cache_storage.dart';
+import '../../../core/errors/app_exceptions.dart';
 import '../../../core/utils/startup_diagnostics.dart';
 import 'dart:convert';
 
@@ -49,7 +50,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     StartupDiagnostics.reportAsync('checkSession started');
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final token = await SecureStorage.getToken();
+      // Timeout guard: flutter_secure_storage (encryptedSharedPreferences) can hang on
+      // some emulators. If it doesn't return quickly, treat as no token -> go to login.
+      final token = await SecureStorage.getToken()
+          .timeout(const Duration(seconds: 4), onTimeout: () => null);
       if (token == null) {
         StartupDiagnostics.reportAsync('checkSession: no token');
         state = state.copyWith(status: AuthStatus.unauthenticated);
@@ -68,8 +72,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       StartupDiagnostics.reportAsync('checkSession: refreshed user from API');
       state = AuthState(status: AuthStatus.authenticated, user: user);
     } catch (e) {
-      await SecureStorage.deleteToken();
-      await CacheStorage.clear();
+      // Only force logout on a genuine auth failure (401). For transient errors
+      // (backend reloading, offline, timeout, server 500) keep the existing
+      // session if we already restored a cached user — otherwise a momentary
+      // network blip during the refresh would log the user straight back out
+      // (the login loop). The token is left on disk so the next check can retry.
+      final isAuthError = e is UnauthorizedException;
+      if (!isAuthError && state.user != null) {
+        state = state.copyWith(status: AuthStatus.authenticated);
+        return;
+      }
+      if (isAuthError) {
+        await SecureStorage.deleteToken();
+        await CacheStorage.clear();
+      }
       StartupDiagnostics.reportAsync('checkSession failed: $e');
       state = AuthState(status: AuthStatus.unauthenticated, error: e.toString());
     }

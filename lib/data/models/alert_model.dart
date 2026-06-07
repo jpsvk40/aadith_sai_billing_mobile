@@ -1,40 +1,48 @@
 class Alert {
   final String id;
-  final String type;
+  final String alertType;
+  final String relatedModule;
+  final String? relatedId;
+  final String title;
   final String message;
+  final String severity; // critical | high | medium | low | info
+  final String status; // active | acknowledged | resolved
   final bool isRead;
-  final String? customerId;
-  final String? customerName;
-  final String? invoiceId;
-  final String? invoiceNumber;
   final double? amount;
+  final String? customerName;
   final DateTime? createdAt;
 
   const Alert({
     required this.id,
-    required this.type,
-    required this.message,
-    required this.isRead,
-    this.customerId,
-    this.customerName,
-    this.invoiceId,
-    this.invoiceNumber,
+    this.alertType = 'info',
+    this.relatedModule = '',
+    this.relatedId,
+    this.title = '',
+    this.message = '',
+    this.severity = 'info',
+    this.status = 'active',
+    this.isRead = false,
     this.amount,
+    this.customerName,
     this.createdAt,
   });
 
-  factory Alert.fromJson(Map<String, dynamic> json) {
-    return Alert(
-      id: json['id']?.toString() ?? '',
-      type: json['type'] ?? 'info',
-      message: json['message'] ?? '',
-      isRead: json['isRead'] as bool? ?? false,
-      customerId: json['customerId']?.toString(),
-      customerName: json['customer']?['name'] ?? json['customerName'],
-      invoiceId: json['invoiceId']?.toString(),
-      invoiceNumber: json['invoice']?['invoiceNumber'] ?? json['invoiceNumber'],
-      amount: double.tryParse(json['amount']?.toString() ?? '0'),
-      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null,
-    );
-  }
+  /// A pending payment that the admin can approve/reject straight from the alert.
+  bool get isPaymentApproval =>
+      alertType == 'payment_received' && severity == 'high' && status == 'active';
+
+  factory Alert.fromJson(Map<String, dynamic> j) => Alert(
+        id: j['id']?.toString() ?? '',
+        alertType: j['alertType']?.toString() ?? 'info',
+        relatedModule: j['relatedModule']?.toString() ?? '',
+        relatedId: j['relatedId']?.toString(),
+        title: j['title']?.toString() ?? '',
+        message: j['message']?.toString() ?? '',
+        severity: j['severity']?.toString() ?? 'info',
+        status: j['status']?.toString() ?? 'active',
+        isRead: j['isRead'] as bool? ?? false,
+        amount: j['amount'] != null ? double.tryParse(j['amount'].toString()) : null,
+        customerName: j['customerName']?.toString(),
+        createdAt: j['createdAt'] != null ? DateTime.tryParse(j['createdAt'].toString()) : null,
+      );
 }

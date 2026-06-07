@@ -7,6 +7,7 @@ class CollectionPayment {
   final String entryType;
   final String? correctionReason;
   final String? correctionForId;
+  final String approvalStatus; // Pending | Approved | Rejected
 
   const CollectionPayment({
     required this.id,
@@ -17,7 +18,11 @@ class CollectionPayment {
     this.entryType = 'payment',
     this.correctionReason,
     this.correctionForId,
+    this.approvalStatus = 'Approved',
   });
+
+  bool get isPending => approvalStatus.toLowerCase() == 'pending';
+  bool get isRejected => approvalStatus.toLowerCase() == 'rejected';
 
   factory CollectionPayment.fromJson(Map<String, dynamic> json) {
     return CollectionPayment(
@@ -28,6 +33,7 @@ class CollectionPayment {
       entryType: json['entryType']?.toString() ?? 'payment',
       correctionReason: json['correctionReason']?.toString(),
       correctionForId: json['correctionForId']?.toString(),
+      approvalStatus: json['approvalStatus']?.toString() ?? 'Approved',
       paymentDate: json['receivedDate'] != null
           ? DateTime.tryParse(json['receivedDate'].toString())
           : (json['paymentDate'] != null

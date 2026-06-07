@@ -42,7 +42,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
-              'Aadith Sai Billing',
+              'Aadith Sai Cloud',
               style: TextStyle(
                 color: AppColors.white,
                 fontSize: 26,
@@ -51,7 +51,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Cloud Billing Platform',
+              'Business Cloud Platform',
               style: TextStyle(color: AppColors.white.withValues(alpha: 0.8), fontSize: 14),
             ),
             const SizedBox(height: 48),

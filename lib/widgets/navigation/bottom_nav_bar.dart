@@ -8,20 +8,29 @@ class AppBottomNavBar extends ConsumerWidget {
   final Widget child;
   const AppBottomNavBar({super.key, required this.child});
 
-  static const _allTabs = [
-    _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/dashboard'),
-    _NavTab(label: 'Orders', icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, route: '/orders'),
-    _NavTab(label: 'Collections', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, route: '/collections'),
-    _NavTab(label: 'Alerts', icon: Icons.notifications_outlined, activeIcon: Icons.notifications, route: '/alerts'),
-    _NavTab(label: 'Profile', icon: Icons.person_outline, activeIcon: Icons.person, route: '/profile'),
-  ];
+  static const _home = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/dashboard');
+  static const _orders = _NavTab(label: 'Orders', icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, route: '/orders');
+  static const _payments = _NavTab(label: 'Payments', icon: Icons.payments_outlined, activeIcon: Icons.payments, route: '/payments');
+  static const _collections = _NavTab(label: 'Collections', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, route: '/collections');
+  static const _commission = _NavTab(label: 'Commission', icon: Icons.percent_outlined, activeIcon: Icons.percent, route: '/commissions');
+  static const _alerts = _NavTab(label: 'Alerts', icon: Icons.notifications_outlined, activeIcon: Icons.notifications, route: '/alerts');
+  static const _profile = _NavTab(label: 'Profile', icon: Icons.person_outline, activeIcon: Icons.person, route: '/profile');
 
   List<_NavTab> _getTabsForUser(dynamic user) {
-    final tabs = <_NavTab>[_allTabs[0]];
-    if (user?.hasModule('orders') == true) tabs.add(_allTabs[1]);
-    if (user?.hasModule('collections') == true) tabs.add(_allTabs[2]);
-    if (user?.hasModule('alerts') == true) tabs.add(_allTabs[3]);
-    tabs.add(_allTabs[4]);
+    final tabs = <_NavTab>[_home];
+    final isRep = user?.isSalesRep == true || user?.isCollectionRep == true;
+    if (isRep) {
+      // Reps: module-driven (handles a rep who does both sales + collection).
+      if (user?.hasModule('orders') == true) tabs.add(_orders);
+      if (user?.hasModule('collections') == true) tabs.add(_collections);
+      if (user?.hasModule('reports') == true) tabs.add(_commission);
+    } else {
+      // Owner / admin / manager.
+      if (user?.hasModule('orders') == true) tabs.add(_orders);
+      if (user?.hasModule('payments') == true) tabs.add(_payments);
+      if (user?.hasModule('alerts') == true) tabs.add(_alerts);
+    }
+    tabs.add(_profile);
     return tabs;
   }
 
@@ -44,6 +53,7 @@ class AppBottomNavBar extends ConsumerWidget {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (i) => context.go(tabs[i].route),
+        type: BottomNavigationBarType.fixed,
         items: tabs
             .map(
               (t) => BottomNavigationBarItem(

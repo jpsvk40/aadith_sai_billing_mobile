@@ -19,6 +19,10 @@ class CollectionDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/collections'),
+        ),
         title: const Text('Collection Detail'),
         actions: [
           TextButton.icon(
@@ -26,20 +30,6 @@ class CollectionDetailScreen extends ConsumerWidget {
             icon: const Icon(Icons.payment, color: AppColors.white, size: 18),
             label: const Text(
               'Collect',
-              style: TextStyle(color: AppColors.white),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: () => context.go(
-              '/collections/$collectionId/payment?mode=correction',
-            ),
-            icon: const Icon(
-              Icons.remove_circle_outline,
-              color: AppColors.white,
-              size: 18,
-            ),
-            label: const Text(
-              'Correct',
               style: TextStyle(color: AppColors.white),
             ),
           ),
@@ -111,74 +101,86 @@ class CollectionDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (collection.payments.any((p) => p.isPending))
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF59E0B)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hourglass_top, color: Color(0xFFB45309), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Payment of ${CurrencyUtils.format(collection.payments.where((p) => p.isPending).fold<double>(0, (a, p) => a + p.amount))} submitted — awaiting admin approval.',
+                        style: const TextStyle(fontSize: 12.5, color: Color(0xFFB45309), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (collection.payments.isNotEmpty) ...[
               Text(
                 'Payment History',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              ...collection.payments.map(
-                (payment) => Card(
+              ...collection.payments.map((payment) {
+                final isCorr = payment.entryType == 'correction';
+                final statusColor = payment.isPending
+                    ? const Color(0xFFF59E0B)
+                    : payment.isRejected
+                        ? AppColors.danger
+                        : AppColors.success;
+                final statusLabel = payment.isPending
+                    ? 'PENDING APPROVAL'
+                    : payment.isRejected
+                        ? 'REJECTED'
+                        : 'APPROVED';
+                return Card(
                   margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(
-                      payment.entryType == 'correction'
-                          ? Icons.remove_circle_outline
-                          : Icons.check_circle_outline,
-                      color: payment.entryType == 'correction'
-                          ? AppColors.danger
-                          : AppColors.success,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(isCorr ? Icons.remove_circle_outline : Icons.payments_outlined,
+                            color: isCorr ? AppColors.danger : statusColor),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(CurrencyUtils.format(payment.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(height: 2),
+                              Text('${isCorr ? 'Correction' : 'Payment'} · ${payment.paymentMode} · ${AppDateUtils.formatDisplay(payment.paymentDate)}',
+                                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(20)),
+                          child: Text(statusLabel, style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700, color: statusColor)),
+                        ),
+                      ],
                     ),
-                    title: Text(
-                      CurrencyUtils.format(payment.amount),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${payment.entryType == 'correction' ? 'Correction' : 'Payment'} | ${payment.paymentMode} | ${AppDateUtils.formatDisplay(payment.paymentDate)}',
-                    ),
-                    trailing:
-                        (payment.notes != null ||
-                            payment.correctionReason != null)
-                        ? Tooltip(
-                            message: payment.correctionReason ?? payment.notes!,
-                            child: const Icon(Icons.info_outline, size: 16),
-                          )
-                        : null,
                   ),
-                ),
-              ),
+                );
+              }),
             ],
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () =>
-                        context.go('/collections/$collectionId/payment'),
-                    icon: const Icon(Icons.payment),
-                    label: const Text('Record Payment'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: (collection.collectedAmount ?? 0) > 0
-                        ? () => context.go(
-                            '/collections/$collectionId/payment?mode=correction',
-                          )
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                    label: const Text('Add Correction'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.danger,
-                      foregroundColor: AppColors.white,
-                      disabledBackgroundColor: AppColors.divider,
-                      disabledForegroundColor: AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => context.go('/collections/$collectionId/payment'),
+                icon: const Icon(Icons.payment),
+                label: const Text('Record Payment'),
+              ),
             ),
           ],
         ),

@@ -20,6 +20,10 @@ import '../features/orders/screens/order_detail_screen.dart';
 import '../features/orders/screens/order_list_screen.dart';
 import '../features/payments/screens/payment_list_screen.dart';
 import '../features/payments/screens/record_payment_screen.dart';
+import '../features/purchases/screens/purchase_list_screen.dart';
+import '../features/purchases/screens/purchase_create_screen.dart';
+import '../features/customers/screens/customer_list_screen.dart';
+import '../data/models/order_model.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/shared/screens/unauthorized_screen.dart';
 import '../widgets/navigation/bottom_nav_bar.dart';
@@ -30,20 +34,21 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   try {
-    final authState = ref.watch(authProvider);
-    StartupDiagnostics.reportAsync(
-      'Creating router: auth=${authState.status.name}',
-    );
+    // Build the router ONCE. Don't ref.watch(authProvider) here — that would
+    // recreate the whole GoRouter (and reuse the module-level GlobalKeys) on every
+    // auth change -> "Multiple widgets used the same GlobalKey". Instead, bridge auth
+    // changes to a Listenable so go_router just re-runs redirects.
+    final authNotifier = ValueNotifier<AuthState>(ref.read(authProvider));
+    ref.onDispose(authNotifier.dispose);
+    ref.listen<AuthState>(authProvider, (_, next) => authNotifier.value = next);
 
     return GoRouter(
       navigatorKey: _rootNavigatorKey,
       initialLocation: '/splash',
+      refreshListenable: authNotifier,
       redirect: (context, state) {
-        final target = redirectForAuthState(authState, state.matchedLocation);
-        StartupDiagnostics.reportAsync(
-          'Router redirect: from=${state.matchedLocation} to=${target ?? 'stay'} auth=${authState.status.name}',
-        );
-        return target;
+        final authState = ref.read(authProvider);
+        return redirectForAuthState(authState, state.matchedLocation);
       },
       routes: [
         GoRoute(path: '/splash', builder: (c, s) => const SplashScreen()),
@@ -75,13 +80,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => const OrderCreateScreen(),
             ),
             GoRoute(
+              path: '/orders/:id/edit',
+              builder: (c, s) => OrderCreateScreen(editOrder: s.extra as Order?),
+            ),
+            GoRoute(
               path: '/orders/:id',
               builder: (c, s) =>
                   OrderDetailScreen(orderId: s.pathParameters['id']!),
             ),
+            GoRoute(path: '/purchases', builder: (c, s) => const PurchaseListScreen()),
+            GoRoute(path: '/purchases/create', builder: (c, s) => PurchaseCreateScreen(prefill: s.extra as PurchasePrefill?)),
+            GoRoute(path: '/customers', builder: (c, s) => const CustomerListScreen()),
             GoRoute(
               path: '/invoices',
-              builder: (c, s) => const InvoiceListScreen(),
+              builder: (c, s) => InvoiceListScreen(initialStatus: s.uri.queryParameters['filter']),
             ),
             GoRoute(
               path: '/invoices/:id',
@@ -90,7 +102,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
             GoRoute(
               path: '/payments',
-              builder: (c, s) => const PaymentListScreen(),
+              builder: (c, s) => PaymentListScreen(initialFilter: s.uri.queryParameters['filter']),
             ),
             GoRoute(
               path: '/payments/record',

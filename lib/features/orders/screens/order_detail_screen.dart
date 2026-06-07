@@ -1,612 +1,303 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/order_model.dart';
-import '../../../data/network/api_client.dart';
-import '../../../data/repositories/order_repository.dart';
-import '../../../widgets/common/app_text_field.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
-import '../../../widgets/common/status_badge.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../providers/order_detail_provider.dart';
 
-class OrderDetailScreen extends ConsumerStatefulWidget {
+/// View-only Order Details — rich layout matching the approved design.
+class OrderDetailScreen extends ConsumerWidget {
   final String orderId;
   const OrderDetailScreen({super.key, required this.orderId});
 
-  @override
-  ConsumerState<OrderDetailScreen> createState() => _OrderDetailScreenState();
-}
-
-class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
-  bool _isSaving = false;
-
-  Future<void> _openFinalQuantityReview(Order order) async {
-    final itemStates = order.items
-        .map(
-          (item) => _EditableOrderItemState(
-            item: item,
-            confirmedController: TextEditingController(
-              text: item.confirmedQuantity != null
-                  ? _formatEditableQuantity(item.confirmedQuantity!)
-                  : '',
-            ),
-            remarkController: TextEditingController(
-              text: item.customerRemark ?? '',
-            ),
-          ),
-        )
-        .toList();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            String? validationMessage;
-
-            Future<void> submit() async {
-              for (final itemState in itemStates) {
-                final confirmedText = itemState.confirmedController.text.trim();
-                final orderedQuantity = itemState.item.quantity;
-                final confirmedQuantity = confirmedText.isEmpty
-                    ? null
-                    : double.tryParse(confirmedText);
-
-                if (confirmedQuantity == null && confirmedText.isNotEmpty) {
-                  setModalState(
-                    () => validationMessage =
-                        'Confirmed quantity must be a valid number.',
-                  );
-                  return;
-                }
-                if (confirmedQuantity != null && confirmedQuantity < 0) {
-                  setModalState(
-                    () => validationMessage =
-                        'Confirmed quantity cannot be negative.',
-                  );
-                  return;
-                }
-                if (confirmedQuantity != null &&
-                    confirmedQuantity > orderedQuantity) {
-                  setModalState(
-                    () => validationMessage =
-                        'Confirmed quantity cannot exceed ordered quantity.',
-                  );
-                  return;
-                }
-                if (confirmedQuantity != null &&
-                    confirmedQuantity < orderedQuantity &&
-                    itemState.remarkController.text.trim().isEmpty) {
-                  setModalState(
-                    () => validationMessage =
-                        'Add a remark for any item that is short-closed.',
-                  );
-                  return;
-                }
-                if (itemState.item.productId == null ||
-                    itemState.item.productId!.isEmpty) {
-                  setModalState(
-                    () => validationMessage =
-                        'This order item is missing product information and cannot be updated from mobile.',
-                  );
-                  return;
-                }
-              }
-
-              final payload = {
-                'items': itemStates
-                    .map(
-                      (itemState) => {
-                        'productId': int.tryParse(itemState.item.productId!),
-                        'quantity': itemState.item.quantity,
-                        'confirmedQuantity':
-                            itemState.confirmedController.text.trim().isEmpty
-                            ? null
-                            : double.parse(
-                                itemState.confirmedController.text.trim(),
-                              ),
-                        'customerRemark': itemState.remarkController.text
-                            .trim(),
-                        'rate': itemState.item.rate,
-                        'discountType': itemState.item.discountType,
-                        'discountValue': itemState.item.discountValue ?? 0,
-                        'taxPercent': itemState.item.taxPercent ?? 0,
-                      },
-                    )
-                    .toList(),
-              };
-
-              setState(() => _isSaving = true);
-              try {
-                final client = ApiClient.getInstance(
-                  onUnauthorized: () =>
-                      ref.read(authProvider.notifier).logout(),
-                );
-                final repository = OrderRepository(client);
-                await repository.updateOrder(widget.orderId, payload);
-                if (!context.mounted || !sheetContext.mounted) return;
-                ref.invalidate(orderDetailProvider(widget.orderId));
-                Navigator.of(sheetContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Final billable quantities updated successfully.',
-                    ),
-                    backgroundColor: AppColors.success,
-                  ),
-                );
-              } catch (e) {
-                if (!mounted) return;
-                setModalState(() => validationMessage = e.toString());
-              } finally {
-                if (mounted) {
-                  setState(() => _isSaving = false);
-                }
-              }
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 16,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Review Final Quantity',
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: _isSaving
-                                  ? null
-                                  : () => Navigator.of(sheetContext).pop(),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Leave confirmed quantity blank to invoice the original order quantity. Enter a lower quantity only when production or accounts confirms a short close.',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Flexible(
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            itemCount: itemStates.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final itemState = itemStates[index];
-                              final item = itemState.item;
-                              return Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.background,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.border),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.productName ??
-                                          'Product ${index + 1}',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Ordered: ${_formatQuantity(item.quantity)}${item.unit != null ? ' ${item.unit}' : ''}',
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    AppTextField(
-                                      label: 'Confirmed / Invoice Quantity',
-                                      controller: itemState.confirmedController,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: true,
-                                          ),
-                                      hint:
-                                          'Leave blank to use ordered quantity',
-                                    ),
-                                    const SizedBox(height: 12),
-                                    AppTextField(
-                                      label: 'Customer Remark',
-                                      controller: itemState.remarkController,
-                                      maxLines: 2,
-                                      hint:
-                                          'Required only when confirmed quantity is lower than ordered quantity',
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        if (validationMessage != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.dangerLight,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              validationMessage!,
-                              style: const TextStyle(
-                                color: AppColors.danger,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isSaving ? null : submit,
-                            icon: _isSaving
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(
-                                      color: AppColors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.check_circle_outline),
-                            label: Text(
-                              _isSaving
-                                  ? 'Saving...'
-                                  : 'Save Final Quantity Review',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    for (final itemState in itemStates) {
-      itemState.confirmedController.dispose();
-      itemState.remarkController.dispose();
-    }
-  }
+  void _soon(BuildContext c, String what) =>
+      ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text('$what — coming in the next update')));
 
   @override
-  Widget build(BuildContext context) {
-    final orderAsync = ref.watch(orderDetailProvider(widget.orderId));
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orderAsync = ref.watch(orderDetailProvider(orderId));
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Order Detail'),
+        title: const Text('Order Details'),
         actions: [
-          orderAsync.maybeWhen(
-            data: (order) => order.canReviewFinalQuantity
-                ? TextButton.icon(
-                    onPressed: _isSaving
-                        ? null
-                        : () => _openFinalQuantityReview(order),
-                    icon: const Icon(
-                      Icons.edit_note,
-                      color: AppColors.white,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      'Review Qty',
-                      style: TextStyle(color: AppColors.white),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-            orElse: () => const SizedBox.shrink(),
-          ),
+          if (orderAsync.asData?.value.isEditable == true)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit order',
+              onPressed: () {
+                final o = orderAsync.asData?.value;
+                if (o != null) context.push('/orders/${o.id}/edit', extra: o);
+              },
+            ),
+          IconButton(icon: const Icon(Icons.print_outlined), onPressed: () => _soon(context, 'Print')),
         ],
       ),
       body: orderAsync.when(
         loading: () => const LoadingIndicator(),
-        error: (e, _) => ErrorStateWidget(
-          message: e.toString(),
-          onRetry: () => ref.refresh(orderDetailProvider(widget.orderId)),
-        ),
-        data: (order) => ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            order.orderNumber,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                        ),
-                        StatusBadge(status: order.status),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    _Row(label: 'Customer', value: order.customerName ?? '-'),
-                    _Row(
-                      label: 'Date',
-                      value: AppDateUtils.formatDisplay(order.createdAt),
-                    ),
-                    if (order.deliveryDate != null)
-                      _Row(
-                        label: 'Delivery',
-                        value: AppDateUtils.formatDisplay(order.deliveryDate),
-                      ),
-                    if (order.representativeName != null)
-                      _Row(label: 'Rep', value: order.representativeName!),
-                    if (order.notes != null && order.notes!.isNotEmpty)
-                      _Row(label: 'Notes', value: order.notes!),
-                    if (order.canReviewFinalQuantity)
-                      _Row(
-                        label: 'Final Qty Review',
-                        value: order.status == 'New'
-                            ? 'Order can still be edited before production or invoicing.'
-                            : 'Accounts can confirm final billable quantity before invoice.',
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (order.items.isNotEmpty) ...[
-              Text(
-                'Order Items',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              ...order.items.map((item) {
-                final invoiceQuantity = item.confirmedQuantity ?? item.quantity;
-                final isShortClosed =
-                    item.confirmedQuantity != null &&
-                    item.confirmedQuantity! < item.quantity;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.productName ?? 'Product',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Ordered Qty: ${_formatQuantity(item.quantity)}${item.unit != null ? ' ${item.unit}' : ''}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Invoice Qty: ${_formatQuantity(invoiceQuantity)}${item.unit != null ? ' ${item.unit}' : ''}',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: isShortClosed
-                                          ? AppColors.warning
-                                          : AppColors.success,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  if (item.customerRemark != null &&
-                                      item.customerRemark!.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        item.customerRemark!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  CurrencyUtils.format(item.rate),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                                if (item.total != null)
-                                  Text(
-                                    CurrencyUtils.format(item.total),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        if (isShortClosed) ...[
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.warningLight,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Short-closed item: invoice will follow confirmed quantity.',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF856404),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(height: 8),
+        error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.refresh(orderDetailProvider(orderId))),
+        data: (order) => RefreshIndicator(
+          onRefresh: () async => ref.refresh(orderDetailProvider(orderId)),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+            children: [
+              _infoCard(context, order),
+              const SizedBox(height: 14),
+              _statBoxes(order),
+              const SizedBox(height: 18),
+              _itemsSection(context, order),
+              const SizedBox(height: 14),
+              _totalsRow(order),
             ],
-            if (order.totalAmount != null)
-              Card(
-                margin: EdgeInsets.zero,
-                color: AppColors.primaryLight,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Amount',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        CurrencyUtils.format(order.totalAmount),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (order.canReviewFinalQuantity) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving
-                      ? null
-                      : () => _openFinalQuantityReview(order),
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text('Review Final Quantity'),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
   }
-}
 
-class _EditableOrderItemState {
-  final OrderItem item;
-  final TextEditingController confirmedController;
-  final TextEditingController remarkController;
-
-  const _EditableOrderItemState({
-    required this.item,
-    required this.confirmedController,
-    required this.remarkController,
-  });
-}
-
-class _Row extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Row({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
+  // ---- Order info card ----
+  Widget _infoCard(BuildContext context, Order order) {
+    return _card(
+      padding: const EdgeInsets.all(16),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(order.orderNumber, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary))),
+              _statusPill(order.status),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _infoCol(Icons.event_outlined, 'Order Date', AppDateUtils.formatDisplay(order.createdAt))),
+              Expanded(child: _infoCol(Icons.local_shipping_outlined, 'Delivery Date', order.deliveryDate != null ? AppDateUtils.formatDisplay(order.deliveryDate) : '-')),
+              Expanded(child: _infoCol(Icons.badge_outlined, 'Rep', order.representativeName ?? '-')),
+            ],
+          ),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider(height: 1)),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Customer', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                    const SizedBox(height: 3),
+                    Text(order.customerName ?? '-', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  ],
+                ),
+              ),
+              if (order.customerPhone != null && order.customerPhone!.isNotEmpty)
+                InkWell(
+                  onTap: () => launchUrl(Uri.parse('tel:${order.customerPhone}')),
+                  borderRadius: BorderRadius.circular(22),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)),
+                    child: const Icon(Icons.call, color: AppColors.primary, size: 20),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
-}
 
-String _formatEditableQuantity(double value) {
-  if (value == value.roundToDouble()) {
-    return value.toInt().toString();
+  Widget _infoCol(IconData icon, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppColors.primary),
+        const SizedBox(height: 5),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+      ],
+    );
   }
-  return value.toString();
+
+  // ---- 3 stat boxes ----
+  Widget _statBoxes(Order order) {
+    final totalQty = order.items.fold<double>(0, (s, i) => s + i.quantity);
+    return Row(
+      children: [
+        Expanded(child: _statBox('${order.items.length}', 'Items', const Color(0xFFFDEAE0), AppColors.textPrimary)),
+        const SizedBox(width: 10),
+        Expanded(child: _statBox(_num(totalQty), 'Total Qty', const Color(0xFFEFF1F4), AppColors.textPrimary)),
+        const SizedBox(width: 10),
+        Expanded(child: _statBox(CurrencyUtils.format(order.totalAmount ?? 0), 'Total Amount', AppColors.successLight, AppColors.success)),
+      ],
+    );
+  }
+
+  Widget _statBox(String value, String label, Color bg, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          Text(value, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: valueColor)),
+          const SizedBox(height: 3),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  // ---- Items table ----
+  Widget _itemsSection(BuildContext context, Order order) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Order Items (${order.items.length})',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _card(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F3F5),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(14)),
+                ),
+                child: Row(
+                  children: const [
+                    Expanded(flex: 4, child: Text('Product', style: _thStyle)),
+                    Expanded(flex: 3, child: Text('Qty / Unit', style: _thStyle)),
+                    Expanded(flex: 2, child: Text('Rate', style: _thStyle, textAlign: TextAlign.right)),
+                    Expanded(flex: 3, child: Text('Amount', style: _thStyle, textAlign: TextAlign.right)),
+                  ],
+                ),
+              ),
+              ...List.generate(order.items.length, (i) {
+                final item = order.items[i];
+                final unit = item.unit ?? '';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: AppColors.divider, width: i == 0 ? 0 : 0.6)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.productName ?? 'Product', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            if (item.variantLabel != null && item.variantLabel!.isNotEmpty)
+                              Text(item.variantLabel!, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                      ),
+                      Expanded(flex: 3, child: Text('${_num(item.quantity)}${unit.isNotEmpty ? ' $unit' : ''}', style: const TextStyle(fontSize: 12.5, color: AppColors.textPrimary))),
+                      Expanded(flex: 2, child: Text(CurrencyUtils.format(item.rate), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+                      Expanded(flex: 3, child: Text(CurrencyUtils.format(item.total ?? 0), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary))),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---- Subtotal / Tax / Total ----
+  Widget _totalsRow(Order order) {
+    final subtotal = order.subtotal > 0 ? order.subtotal : order.items.fold<double>(0, (s, i) => s + (i.total ?? 0));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(color: const Color(0xFFF1F3F5), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Expanded(child: _totalCol('Subtotal', CurrencyUtils.format(subtotal), AppColors.textPrimary)),
+          Expanded(child: _totalCol('Tax', CurrencyUtils.format(order.taxTotal), AppColors.textPrimary)),
+          Expanded(child: _totalCol('Total Amount', CurrencyUtils.format(order.totalAmount ?? 0), AppColors.success)),
+        ],
+      ),
+    );
+  }
+
+  Widget _totalCol(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+        const SizedBox(height: 4),
+        Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
+  }
+
+  // ---- Bottom action bar ----
+  // ---- helpers ----
+  Widget _card({required Widget child, EdgeInsets padding = EdgeInsets.zero}) => Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border, width: 0.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: child,
+      );
+
+  Widget _statusPill(String status) {
+    final c = _statusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(20)),
+      child: Text(status.toUpperCase(), style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: c)),
+    );
+  }
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'New':
+        return AppColors.primary;
+      case 'In Production':
+        return const Color(0xFF6F42C1);
+      case 'Production Completed':
+        return AppColors.info;
+      case 'Packed':
+        return AppColors.warning;
+      case 'Dispatched':
+        return const Color(0xFF0891B2);
+      case 'Delivered':
+        return AppColors.success;
+      case 'Cancelled':
+      case 'Void':
+        return AppColors.danger;
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  String _num(double v) {
+    if (v == v.roundToDouble()) return v.toInt().toString();
+    return v.toStringAsFixed(2);
+  }
 }
 
-String _formatQuantity(double value) => _formatEditableQuantity(value);
+const _thStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary);

@@ -4,21 +4,39 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../data/models/invoice_model.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
-import '../../../widgets/common/status_badge.dart';
 import '../providers/invoice_detail_provider.dart';
+
+const _badgeColors = [
+  Color(0xFF0D6EFD), Color(0xFF198754), Color(0xFFF59E0B), Color(0xFF7C3AED),
+  Color(0xFFDC3545), Color(0xFF0891B2), Color(0xFF6366F1), Color(0xFFDB2777),
+];
 
 class InvoiceDetailScreen extends ConsumerWidget {
   final String invoiceId;
   const InvoiceDetailScreen({super.key, required this.invoiceId});
 
+  Color _statusColor(String s, bool overdue) {
+    if (overdue) return AppColors.danger;
+    switch (s) {
+      case 'Paid':
+        return AppColors.success;
+      case 'Partial':
+        return AppColors.warning;
+      default:
+        return AppColors.info;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(invoiceDetailProvider(invoiceId));
-
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/invoices')),
         title: const Text('Invoice Detail'),
         actions: [
           TextButton.icon(
@@ -31,82 +49,25 @@ class InvoiceDetailScreen extends ConsumerWidget {
       body: invoiceAsync.when(
         loading: () => const LoadingIndicator(),
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.refresh(invoiceDetailProvider(invoiceId))),
-        data: (invoice) => ListView(
-          padding: const EdgeInsets.all(16),
+        data: (inv) => Column(
           children: [
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async => ref.refresh(invoiceDetailProvider(invoiceId)),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(invoice.invoiceNumber, style: Theme.of(context).textTheme.headlineSmall),
-                        StatusBadge(status: invoice.isOverdue ? 'Overdue' : invoice.status),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    _Row(label: 'Customer', value: invoice.customerName ?? '-'),
-                    _Row(label: 'Date', value: AppDateUtils.formatDisplay(invoice.invoiceDate)),
-                    if (invoice.dueDate != null) _Row(label: 'Due Date', value: AppDateUtils.formatDisplay(invoice.dueDate)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (invoice.items.isNotEmpty) ...[
-              Text('Items', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              ...invoice.items.map(
-                (item) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.productName ?? 'Item', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                              Text(
-                                'Qty: ${item.quantity} x ${CurrencyUtils.format(item.price)}',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(CurrencyUtils.format(item.total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _TotalRow(label: 'Subtotal', value: CurrencyUtils.format(invoice.subtotal)),
-                    if ((invoice.cgst ?? 0) > 0) _TotalRow(label: 'CGST', value: CurrencyUtils.format(invoice.cgst)),
-                    if ((invoice.sgst ?? 0) > 0) _TotalRow(label: 'SGST', value: CurrencyUtils.format(invoice.sgst)),
-                    if ((invoice.igst ?? 0) > 0) _TotalRow(label: 'IGST', value: CurrencyUtils.format(invoice.igst)),
-                    const Divider(),
-                    _TotalRow(label: 'Total', value: CurrencyUtils.format(invoice.totalAmount), bold: true),
-                    if ((invoice.paidAmount ?? 0) > 0)
-                      _TotalRow(label: 'Paid', value: CurrencyUtils.format(invoice.paidAmount), color: AppColors.success),
-                    if ((invoice.outstandingAmount ?? 0) > 0)
-                      _TotalRow(
-                        label: 'Outstanding',
-                        value: CurrencyUtils.format(invoice.outstandingAmount),
-                        color: AppColors.danger,
-                        bold: true,
-                      ),
+                    _headerCard(context, inv),
+                    const SizedBox(height: 14),
+                    _amountBoxes(inv),
+                    const SizedBox(height: 18),
+                    if (inv.items.isNotEmpty) _itemsSection(inv),
+                    const SizedBox(height: 14),
+                    _totalsCard(inv),
+                    if (inv.splitInvoices.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      _splitSection(context, inv),
+                    ],
                   ],
                 ),
               ),
@@ -116,48 +77,227 @@ class InvoiceDetailScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
-class _Row extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Row({required this.label, required this.value});
+  Widget _headerCard(BuildContext context, Invoice inv) {
+    final overdue = inv.isOverdue;
+    return _card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: Text(inv.invoiceNumber, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary))),
+                _pill(overdue ? 'OVERDUE' : inv.status.toUpperCase(), _statusColor(inv.status, overdue)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _kv('Customer', inv.customerName ?? '-'),
+            const SizedBox(height: 8),
+            _kv('Date', AppDateUtils.formatDisplay(inv.invoiceDate)),
+            if (inv.dueDate != null) ...[
+              const SizedBox(height: 8),
+              _kv('Due Date', AppDateUtils.formatDisplay(inv.dueDate)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
+  Widget _kv(String k, String v) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 80, child: Text(k, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+        Expanded(child: Text(v, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+      ],
+    );
+  }
+
+  Widget _amountBoxes(Invoice inv) {
+    return Row(
+      children: [
+        Expanded(child: _amountBox('Total Amount', inv.totalAmount, AppColors.primary)),
+        const SizedBox(width: 10),
+        Expanded(child: _amountBox('Paid Amount', inv.paidAmount ?? 0, AppColors.success)),
+        const SizedBox(width: 10),
+        Expanded(child: _amountBox('Balance', inv.outstandingAmount ?? 0, AppColors.danger)),
+      ],
+    );
+  }
+
+  Widget _amountBox(String label, double value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
         children: [
-          SizedBox(width: 90, child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
+          Text(CurrencyUtils.formatCompact(value), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 3),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         ],
       ),
     );
   }
-}
 
-class _TotalRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool bold;
-  final Color? color;
-  const _TotalRow({required this.label, required this.value, this.bold = false, this.color});
+  Widget _itemsSection(Invoice inv) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Items (${inv.items.length})', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        const SizedBox(height: 8),
+        _card(
+          child: Column(
+            children: List.generate(inv.items.length, (i) {
+              final item = inv.items[i];
+              final c = _badgeColors[i % _badgeColors.length];
+              final last = i == inv.items.length - 1;
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: last ? Colors.transparent : AppColors.divider, width: 0.6))),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 26, height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                      child: Text('${i + 1}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: c)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.productName ?? 'Item', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          const SizedBox(height: 2),
+                          Text('${_qty(item.quantity)} × ${CurrencyUtils.format(item.price)}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(CurrencyUtils.format(item.total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _totalsCard(Invoice inv) {
+    return _card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _totalRow('Sub Total', CurrencyUtils.format(inv.subtotal)),
+            if ((inv.cgst ?? 0) > 0) _totalRow('CGST', CurrencyUtils.format(inv.cgst)),
+            if ((inv.sgst ?? 0) > 0) _totalRow('SGST', CurrencyUtils.format(inv.sgst)),
+            if ((inv.igst ?? 0) > 0) _totalRow('IGST', CurrencyUtils.format(inv.igst)),
+            if (inv.roundOff != 0) _totalRow('Round Off', CurrencyUtils.format(inv.roundOff)),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(height: 1)),
+            _totalRow('Total Amount', CurrencyUtils.format(inv.totalAmount), bold: true),
+            const SizedBox(height: 4),
+            _totalRow('Balance Amount', CurrencyUtils.format(inv.outstandingAmount ?? 0), bold: true, color: AppColors.danger),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _totalRow(String label, String value, {bool bold = false, Color? color}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 14)),
-          Text(
-            value,
-            style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 14, color: color ?? AppColors.textPrimary),
-          ),
+          Text(label, style: TextStyle(fontSize: bold ? 14 : 13, fontWeight: bold ? FontWeight.bold : FontWeight.w500, color: AppColors.textPrimary)),
+          Text(value, style: TextStyle(fontSize: bold ? 15 : 13, fontWeight: bold ? FontWeight.bold : FontWeight.w600, color: color ?? AppColors.textPrimary)),
         ],
       ),
     );
   }
+
+  Widget _splitSection(BuildContext context, Invoice inv) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Split Invoices (${inv.splitInvoices.length})', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        const SizedBox(height: 8),
+        _card(
+          child: Column(
+            children: List.generate(inv.splitInvoices.length, (i) {
+              final sp = inv.splitInvoices[i];
+              final last = i == inv.splitInvoices.length - 1;
+              final sc = _statusColor(sp.status, false);
+              return InkWell(
+                onTap: () => context.go('/invoices/${sp.id}'),
+                child: Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: last ? Colors.transparent : AppColors.divider, width: 0.6))),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(sp.invoiceNo, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.primary)),
+                            if (sp.paymentMode != null) ...[
+                              const SizedBox(height: 3),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(color: AppColors.infoLight, borderRadius: BorderRadius.circular(4)),
+                                child: Text(sp.paymentMode!, style: const TextStyle(fontSize: 10, color: AppColors.info, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(CurrencyUtils.format(sp.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 3),
+                          _pill(sp.status.toUpperCase(), sc),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _card({required Widget child}) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border, width: 0.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: child,
+      );
+
+  Widget _pill(String text, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: c.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(20)),
+        child: Text(text, style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: c)),
+      );
+
+  String _qty(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
 }

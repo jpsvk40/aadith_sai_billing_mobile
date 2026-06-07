@@ -2,13 +2,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   static String get baseUrl {
+    // 1) compile-time override for local dev: flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3001
+    const fromDefine = String.fromEnvironment('API_BASE_URL');
+    if (fromDefine.isNotEmpty) return fromDefine;
+    // 2) .env (if bundled), else the deployed default
     try {
       final envUrl = dotenv.maybeGet('API_BASE_URL');
       return (envUrl != null && envUrl.isNotEmpty)
           ? envUrl
-          : 'https://aadith-sai-billing-cloud-4g5n.onrender.com';
+          : 'https://www.aadithsaibillingcloud.com';
     } catch (_) {
-      return 'https://aadith-sai-billing-cloud-4g5n.onrender.com';
+      return 'https://www.aadithsaibillingcloud.com';
     }
   }
 
@@ -32,6 +36,20 @@ class ApiConstants {
 
   // Payments
   static const String payments = '/api/payments';
+
+  // Vendor purchases (Admin/Owner — purchase entry on mobile)
+  static const String vendorPurchases = '/api/vendor-purchases';
+  static String vendorPurchaseDetail(String id) => '/api/vendor-purchases/$id';
+  static const String vendorPayments = '/api/vendor-payments';
+  static const String vendorCreditNotes = '/api/vendor-credit-notes';
+  static const String vendors = '/api/vendors';
+
+  // AI scanner (multipart field 'file')
+  static const String scanVendorBill = '/api/ai/scan-vendor-bill';
+  static const String scanCreditNote = '/api/ai/scan-credit-note';
+
+  // Mobile home (role-aware overview: financials + activity feed)
+  static const String mobileHome = '/api/reports/mobile-home';
 
   // Collections
   static const String collections = '/api/collections';

@@ -14,7 +14,7 @@ class InvoiceRepository {
       if (paymentStatus != null) 'paymentStatus': paymentStatus,
       if (search != null && search.isNotEmpty) 'search': search,
     });
-    final list = data['invoices'] ?? data['data'] ?? data;
+    final list = data is Map ? (data['invoices'] ?? data['data'] ?? data) : data;
     if (list is List) {
       return list.map((e) => Invoice.fromJson(e as Map<String, dynamic>)).toList();
     }

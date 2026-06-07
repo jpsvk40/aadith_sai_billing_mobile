@@ -11,7 +11,7 @@ class CommissionRepository {
       'page': page,
       'limit': limit,
     });
-    final list = data['commissions'] ?? data['data'] ?? data;
+    final list = data is Map ? (data['commissions'] ?? data['data'] ?? data) : data;
     if (list is List) {
       return list.map((e) => Commission.fromJson(e as Map<String, dynamic>)).toList();
     }

@@ -72,6 +72,33 @@ class ApiClient {
     }
   }
 
+  /// Multipart upload (e.g. AI bill/credit-note scans). Longer timeout for AI.
+  Future<dynamic> uploadFile(
+    String path,
+    String filePath, {
+    String fieldName = 'file',
+    Map<String, dynamic>? fields,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        ...?fields,
+        fieldName: await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post(
+        path,
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   AppException _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.unknown) {

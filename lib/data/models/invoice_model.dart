@@ -36,22 +36,43 @@ class InvoiceItem {
   }
 }
 
+class InvoiceSplit {
+  final String id;
+  final String invoiceNo;
+  final String? paymentMode;
+  final double amount;
+  final String status;
+
+  const InvoiceSplit({required this.id, required this.invoiceNo, this.paymentMode, required this.amount, required this.status});
+
+  factory InvoiceSplit.fromJson(Map<String, dynamic> j) => InvoiceSplit(
+        id: j['id']?.toString() ?? '',
+        invoiceNo: j['invoiceNo']?.toString() ?? j['gstInvoiceNo']?.toString() ?? '',
+        paymentMode: j['splitPaymentMode']?.toString(),
+        amount: double.tryParse(j['grandTotal']?.toString() ?? '0') ?? 0,
+        status: j['paymentStatus']?.toString() ?? 'Unpaid',
+      );
+}
+
 class Invoice {
   final String id;
   final String invoiceNumber;
   final String status;
   final String? customerId;
   final String? customerName;
+  final String? customerPhone;
   final double subtotal;
   final double? cgst;
   final double? sgst;
   final double? igst;
+  final double roundOff;
   final double totalAmount;
   final double? paidAmount;
   final double? outstandingAmount;
   final DateTime? invoiceDate;
   final DateTime? dueDate;
   final List<InvoiceItem> items;
+  final List<InvoiceSplit> splitInvoices;
 
   const Invoice({
     required this.id,
@@ -59,16 +80,19 @@ class Invoice {
     required this.status,
     this.customerId,
     this.customerName,
+    this.customerPhone,
     required this.subtotal,
     this.cgst,
     this.sgst,
     this.igst,
+    this.roundOff = 0,
     required this.totalAmount,
     this.paidAmount,
     this.outstandingAmount,
     this.invoiceDate,
     this.dueDate,
     this.items = const [],
+    this.splitInvoices = const [],
   });
 
   factory Invoice.fromJson(Map<String, dynamic> json) {
@@ -78,10 +102,12 @@ class Invoice {
       status: json['paymentStatus'] ?? json['status'] ?? 'Unpaid',
       customerId: json['customerId']?.toString(),
       customerName: json['customer']?['customerName'] ?? json['billingName'] ?? json['customerName'],
+      customerPhone: json['customer']?['phone']?.toString() ?? json['customerPhone']?.toString(),
       subtotal: double.tryParse(json['subtotal']?.toString() ?? '0') ?? 0,
       cgst: double.tryParse(json['cgstTotal']?.toString() ?? json['cgst']?.toString() ?? '0'),
       sgst: double.tryParse(json['sgstTotal']?.toString() ?? json['sgst']?.toString() ?? '0'),
       igst: double.tryParse(json['igstTotal']?.toString() ?? json['igst']?.toString() ?? '0'),
+      roundOff: double.tryParse(json['roundOff']?.toString() ?? '0') ?? 0,
       totalAmount: double.tryParse(json['grandTotal']?.toString() ?? json['totalAmount']?.toString() ?? '0') ?? 0,
       paidAmount: double.tryParse(json['paidAmount']?.toString() ?? '0'),
       outstandingAmount: double.tryParse(json['balanceAmount']?.toString() ?? json['outstandingAmount']?.toString() ?? '0'),
@@ -89,6 +115,9 @@ class Invoice {
       dueDate: json['dueDate'] != null ? DateTime.tryParse(json['dueDate'].toString()) : null,
       items: ((json['invoiceItems'] ?? json['items']) as List<dynamic>?)
           ?.map((e) => InvoiceItem.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
+      splitInvoices: ((json['childInvoices'] ?? json['splitInvoices']) as List<dynamic>?)
+          ?.map((e) => InvoiceSplit.fromJson(e as Map<String, dynamic>))
           .toList() ?? [],
     );
   }

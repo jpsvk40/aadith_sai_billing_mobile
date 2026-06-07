@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Aadith Sai Billing Mobile</string>
+	<string>Aadith Sai Cloud</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Aadith Sai Cloud uses the camera to scan vendor bills and capture documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aadith Sai Cloud needs access to your photos to upload bill images for scanning.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Aadith Sai Cloud may save documents to your photo library.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

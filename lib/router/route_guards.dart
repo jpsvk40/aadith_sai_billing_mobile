@@ -35,25 +35,33 @@ bool canAccessLocation(AuthUser? user, String location) {
 }
 
 String postLoginHome(AuthUser? user) {
-  if (user == null) return '/dashboard';
-  if (user.hasModule('orders')) return '/orders';
-  if (user.hasModule('collections')) return '/collections';
-  if (user.hasModule('invoices')) return '/invoices';
-  if (user.hasModule('payments')) return '/payments';
-  if (user.hasModule('alerts')) return '/alerts';
+  // Home is the landing screen for everyone (role-aware overview).
   return '/dashboard';
 }
 
 String? redirectForAuthState(AuthState authState, String location) {
-  final isAuthenticated = authState.status == AuthStatus.authenticated;
-  final isLoading = authState.status == AuthStatus.initial || authState.status == AuthStatus.loading;
+  final status = authState.status;
+  final isAuthenticated = status == AuthStatus.authenticated;
   final publicRoute = isPublicRoute(location);
 
-  if (isLoading) {
+  // App just launched, session not yet checked -> splash runs checkSession once.
+  if (status == AuthStatus.initial) {
     return location == '/splash' ? null : '/splash';
   }
 
+  // A login (or session refresh) is in flight. Do NOT route to /splash here:
+  // that spawns a fresh SplashScreen whose checkSession() races the in-progress
+  // login and can overwrite the success with "unauthenticated" -> login bounce.
+  // Just wait on the current screen until auth resolves.
+  if (status == AuthStatus.loading) {
+    return null;
+  }
+
   if (!isAuthenticated) {
+    // /splash is only for the loading phase. Once auth resolves to unauthenticated,
+    // leave splash for the login screen (otherwise a fresh install with no token
+    // stays stuck on splash forever).
+    if (location == '/splash') return '/login';
     return publicRoute ? null : '/login';
   }
 

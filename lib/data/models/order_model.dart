@@ -2,6 +2,7 @@ class OrderItem {
   final String? id;
   final String? productId;
   final String? productName;
+  final String? variantLabel;
   final double quantity;
   final double? confirmedQuantity;
   final String? customerRemark;
@@ -16,6 +17,7 @@ class OrderItem {
     this.id,
     this.productId,
     this.productName,
+    this.variantLabel,
     required this.quantity,
     this.confirmedQuantity,
     this.customerRemark,
@@ -35,6 +37,7 @@ class OrderItem {
           json['product']?['productName'] ??
           json['productNameSnapshot'] ??
           json['productName'],
+      variantLabel: json['variant']?['label']?.toString() ?? json['variantLabel']?.toString(),
       quantity: double.tryParse(json['quantity']?.toString() ?? '0') ?? 0,
       confirmedQuantity: json['confirmedQuantity'] != null
           ? double.tryParse(json['confirmedQuantity'].toString())
@@ -68,10 +71,15 @@ class Order {
   final String status;
   final String? customerId;
   final String? customerName;
+  final String? customerPhone;
   final String? representativeId;
   final String? representativeName;
   final double? totalAmount;
+  final double subtotal;
+  final double taxTotal;
+  final double discountTotal;
   final String? notes;
+  final String? deliveryAddress;
   final DateTime? createdAt;
   final DateTime? deliveryDate;
   final List<OrderItem> items;
@@ -82,14 +90,21 @@ class Order {
     required this.status,
     this.customerId,
     this.customerName,
+    this.customerPhone,
     this.representativeId,
     this.representativeName,
     this.totalAmount,
+    this.subtotal = 0,
+    this.taxTotal = 0,
+    this.discountTotal = 0,
     this.notes,
+    this.deliveryAddress,
     this.createdAt,
     this.deliveryDate,
     this.items = const [],
   });
+
+  bool get isEditable => status == 'New';
 
   bool get canReviewFinalQuantity =>
       ['New', 'Production Completed', 'Packed'].contains(status);
@@ -105,6 +120,7 @@ class Order {
       status: json['status'] ?? 'New',
       customerId: json['customerId']?.toString(),
       customerName: json['customer']?['customerName'] ?? json['customerName'],
+      customerPhone: json['customer']?['phone']?.toString() ?? json['customerPhone']?.toString(),
       representativeId: json['representativeId']?.toString(),
       representativeName:
           json['representative']?['name'] ?? json['representativeName'],
@@ -113,7 +129,11 @@ class Order {
             json['totalAmount']?.toString() ??
             '0',
       ),
+      subtotal: double.tryParse(json['subtotal']?.toString() ?? '0') ?? 0,
+      taxTotal: double.tryParse(json['taxTotal']?.toString() ?? '0') ?? 0,
+      discountTotal: double.tryParse(json['discountTotal']?.toString() ?? '0') ?? 0,
       notes: json['notes'],
+      deliveryAddress: json['deliveryAddress']?.toString(),
       createdAt: json['orderDate'] != null
           ? DateTime.tryParse(json['orderDate'].toString())
           : (json['createdAt'] != null

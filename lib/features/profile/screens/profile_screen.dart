@@ -97,7 +97,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         const SizedBox(height: 32),
         Center(
-          child: Text('Aadith Sai Billing v1.0.0',
+          child: Text('Aadith Sai Cloud v1.0.0',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
         ),
       ],

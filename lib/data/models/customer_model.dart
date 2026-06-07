@@ -4,6 +4,9 @@ class Customer {
   final String? phone;
   final String? email;
   final String? address;
+  final String? shippingAddress;
+  final String? city;
+  final String? district;
   final String? gstNumber;
   final String? gstMode;
   final double? discountPercent;
@@ -15,6 +18,9 @@ class Customer {
     this.phone,
     this.email,
     this.address,
+    this.shippingAddress,
+    this.city,
+    this.district,
     this.gstNumber,
     this.gstMode,
     this.discountPercent,
@@ -24,13 +30,16 @@ class Customer {
   factory Customer.fromJson(Map<String, dynamic> json) {
     return Customer(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      phone: json['phone'],
-      email: json['email'],
-      address: json['address'],
-      gstNumber: json['gstNumber'],
-      gstMode: json['gstMode'],
-      discountPercent: double.tryParse(json['discountPercent']?.toString() ?? '0'),
+      name: json['customerName']?.toString() ?? json['name']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? json['whatsappContact']?.toString(),
+      email: json['email']?.toString(),
+      address: json['billingAddress']?.toString() ?? json['address']?.toString(),
+      shippingAddress: json['shippingAddress']?.toString(),
+      city: json['city']?.toString(),
+      district: json['district']?.toString(),
+      gstNumber: json['gstin']?.toString() ?? json['gstNumber']?.toString(),
+      gstMode: json['gstMode']?.toString(),
+      discountPercent: double.tryParse(json['discountPercentage']?.toString() ?? json['discountPercent']?.toString() ?? '0'),
       isActive: json['isActive'] as bool? ?? true,
     );
   }

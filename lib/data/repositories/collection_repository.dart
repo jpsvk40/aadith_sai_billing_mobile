@@ -14,7 +14,7 @@ class CollectionRepository {
       ApiConstants.collections,
       queryParams: {'page': page, 'limit': limit},
     );
-    final list = data['collections'] ?? data['data'] ?? data;
+    final list = data is Map ? (data['collections'] ?? data['data'] ?? data) : data;
     if (list is List) {
       return list
           .map((e) => Collection.fromJson(e as Map<String, dynamic>))
