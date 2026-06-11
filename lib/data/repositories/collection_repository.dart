@@ -28,6 +28,16 @@ class CollectionRepository {
     return Collection.fromJson(data['collection'] ?? data);
   }
 
+  /// Send the invoice PDF to the customer's WhatsApp.
+  Future<void> sendInvoiceWhatsApp(String invoiceId, {String? to}) async {
+    await _client.post('/invoices/$invoiceId/whatsapp', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+  }
+
+  /// Send a payment-receipt PDF for a collection payment to the customer's WhatsApp.
+  Future<void> sendReceiptWhatsApp(String paymentId, {String? to}) async {
+    await _client.post('/collections/payment/$paymentId/whatsapp-receipt', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+  }
+
   Future<void> recordCollectionPayment(
     String id,
     Map<String, dynamic> paymentData,

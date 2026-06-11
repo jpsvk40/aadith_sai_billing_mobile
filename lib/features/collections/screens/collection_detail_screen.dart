@@ -7,11 +7,84 @@ import '../../../core/utils/date_utils.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../../widgets/common/status_badge.dart';
+import '../../../data/models/collection_model.dart';
+import '../../../data/network/api_client.dart';
+import '../../../data/repositories/collection_repository.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/collection_detail_provider.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
   final String collectionId;
   const CollectionDetailScreen({super.key, required this.collectionId});
+
+  Widget _waActions(BuildContext context, WidgetRef ref, Collection c) {
+    return Row(children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: c.invoiceId == null ? null : () => _sendInvoice(context, ref, c),
+          icon: const Icon(Icons.chat, size: 18, color: Color(0xFF128C7E)),
+          label: const Text('Invoice'),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: c.payments.isEmpty ? null : () => _sendReceipt(context, ref, c),
+          icon: const Icon(Icons.receipt_long, size: 18, color: Color(0xFF25D366)),
+          label: const Text('Receipt'),
+        ),
+      ),
+    ]);
+  }
+
+  Future<String?> _promptNumber(BuildContext context, String title, String initial) {
+    final ctrl = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'WhatsApp number', hintText: '91XXXXXXXXXX'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Send')),
+        ],
+      ),
+    );
+  }
+
+  String _waErr(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('403') || s.contains('not enabled')) return "WhatsApp invoicing isn't enabled for your company.";
+    if (s.contains('503') || s.contains('not configured')) return "WhatsApp isn't set up on the server yet.";
+    if (s.contains('400') || s.contains('no valid')) return 'No valid WhatsApp/phone number.';
+    return 'Could not send on WhatsApp. Please try again.';
+  }
+
+  Future<void> _doSend(BuildContext context, WidgetRef ref, String label, Future<void> Function(CollectionRepository repo, String to) action) async {
+    final to = await _promptNumber(context, 'Send $label on WhatsApp', '');
+    if (to == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(content: Text('Sending $label…')));
+    try {
+      final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
+      await action(CollectionRepository(client), to);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text('✓ $label sent on WhatsApp')));
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text(_waErr(e))));
+    }
+  }
+
+  Future<void> _sendInvoice(BuildContext context, WidgetRef ref, Collection c) =>
+      _doSend(context, ref, 'Invoice', (repo, to) => repo.sendInvoiceWhatsApp(c.invoiceId!, to: to));
+
+  Future<void> _sendReceipt(BuildContext context, WidgetRef ref, Collection c) =>
+      _doSend(context, ref, 'Receipt', (repo, to) => repo.sendReceiptWhatsApp(c.payments.last.id, to: to));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,6 +117,8 @@ class CollectionDetailScreen extends ConsumerWidget {
         data: (collection) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            _waActions(context, ref, collection),
+            const SizedBox(height: 12),
             Card(
               margin: EdgeInsets.zero,
               child: Padding(

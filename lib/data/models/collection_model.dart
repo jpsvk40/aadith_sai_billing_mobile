@@ -45,6 +45,7 @@ class CollectionPayment {
 
 class Collection {
   final String id;
+  final String? invoiceId;
   final String? customerId;
   final String? customerName;
   final String? representativeId;
@@ -59,6 +60,7 @@ class Collection {
 
   const Collection({
     required this.id,
+    this.invoiceId,
     this.customerId,
     this.customerName,
     this.representativeId,
@@ -75,6 +77,7 @@ class Collection {
   factory Collection.fromJson(Map<String, dynamic> json) {
     return Collection(
       id: json['id']?.toString() ?? '',
+      invoiceId: json['invoice']?['id']?.toString() ?? json['invoiceId']?.toString(),
       customerId:
           json['invoice']?['customer']?['id']?.toString() ??
           json['customerId']?.toString(),
