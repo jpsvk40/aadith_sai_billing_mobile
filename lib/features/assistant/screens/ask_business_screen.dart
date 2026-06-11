@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/network/api_client.dart';
 import '../../../data/models/assistant_model.dart';
@@ -25,8 +27,10 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   final _scrollCtrl = ScrollController();
 
   final _rec = AudioRecorder();
+  final FlutterTts _tts = FlutterTts();
   bool _recording = false;
   bool _transcribing = false;
+  bool _speakAnswers = true; // read answers aloud
 
   AssistantStatus? _status;
   bool _loadingStatus = true;
@@ -53,7 +57,19 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     _rec.dispose();
+    _tts.stop();
     super.dispose();
+  }
+
+  Future<void> _speak(String text) async {
+    if (!_speakAnswers || text.trim().isEmpty) return;
+    try {
+      await _tts.stop();
+      // Pick a voice language from the answer's script (Tamil vs default English).
+      final isTamil = RegExp(r'[஀-௿]').hasMatch(text);
+      await _tts.setLanguage(isTamil ? 'ta-IN' : 'en-IN');
+      await _tts.speak(text);
+    } catch (_) {/* TTS unavailable — silent */}
   }
 
   Future<void> _toggleMic() async {
@@ -86,7 +102,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     try {
       final text = await _repo.transcribe(path);
       if (text.trim().isNotEmpty) {
-        _inputCtrl.text = text.trim(); // place in box for the user to review, then send
+        _send(text.trim()); // voice → ask right away (hands-free); the answer is spoken back
       } else {
         _toast('Didn\'t catch that — please try again.');
       }
@@ -124,7 +140,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     _scrollToEnd();
     try {
       final ans = await _repo.ask(q);
-      _replaceLast(AssistantTurn(isUser: false, text: ans.answer.isEmpty ? '(no answer)' : ans.answer));
+      final answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
+      _replaceLast(AssistantTurn(isUser: false, text: answerText));
+      _speak(answerText);
     } catch (e) {
       _replaceLast(AssistantTurn(isUser: false, text: _friendlyError(e)));
     } finally {
@@ -164,7 +182,23 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Ask your business')),
+      appBar: AppBar(
+        title: const Text('Ask your business'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
+        ),
+        actions: [
+          IconButton(
+            tooltip: _speakAnswers ? 'Mute voice' : 'Speak answers',
+            icon: Icon(_speakAnswers ? Icons.volume_up : Icons.volume_off),
+            onPressed: () {
+              setState(() => _speakAnswers = !_speakAnswers);
+              if (!_speakAnswers) _tts.stop();
+            },
+          ),
+        ],
+      ),
       body: _loadingStatus
           ? const Center(child: CircularProgressIndicator())
           : (_status?.enabled != true ? _locked() : _chat()),

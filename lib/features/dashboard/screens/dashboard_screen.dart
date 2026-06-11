@@ -610,9 +610,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   // ---------------- Quick Access ----------------
   Widget _quickAccess() {
+    final user = ref.read(authProvider).user;
     final actions = [
       (Icons.add_shopping_cart, 'New Purchase', AppColors.primary, () => context.go('/purchases')),
-      (Icons.location_on_outlined, 'Site Logistics', const Color(0xFF0EA5E9), () => context.go('/site-logistics')),
+      // Site Logistics belongs to the Project & Contract (ERP) module — hide it for billing-only companies.
+      if (user?.hasModule('projects') == true)
+        (Icons.location_on_outlined, 'Site Logistics', const Color(0xFF0EA5E9), () => context.go('/site-logistics')),
       (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/payments?filter=Pending')),
       (Icons.receipt_long, 'Orders', _purple, () => context.go('/orders')),
       (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),

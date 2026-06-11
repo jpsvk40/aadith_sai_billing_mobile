@@ -17,6 +17,7 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/invoices')) return 'invoices';
   if (location.startsWith('/payments')) return 'payments';
   if (location.startsWith('/collections')) return 'collections';
+  if (location.startsWith('/site-logistics')) return 'projects'; // ERP-only (Project & Contract)
   if (location.startsWith('/commissions')) return 'reports';
   if (location.startsWith('/alerts')) return 'alerts';
   if (location.startsWith('/dashboard')) return null;
