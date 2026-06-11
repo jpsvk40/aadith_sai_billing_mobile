@@ -1,7 +1,7 @@
 name: aadith_sai_billing_mobile
 description: "Aadith Sai Cloud Billing Mobile App"
 publish_to: 'none'
-version: 1.0.0+14
+version: 1.0.0+15
 
 environment:
   sdk: ^3.11.1
@@ -22,7 +22,7 @@ dependencies:
   flutter_dotenv: ^5.2.1
   fl_chart: ^0.69.0
   image_picker: ^1.1.2
-  record: ^5.0.0          # mic capture for "Ask your business" voice
+  record: ^7.1.0          # mic capture for "Ask your business" voice
   path_provider: ^2.1.0   # temp dir for the recorded clip
 
 dev_dependencies:
