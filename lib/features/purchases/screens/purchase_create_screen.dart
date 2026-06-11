@@ -46,6 +46,7 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
   String? _loadError;
   String? _scannedVendorName;
   String? _scannedVendorGstin;
+  List<Vendor> _vendorConfirmCandidates = [];
 
   late final ApiClient _client;
 
@@ -81,21 +82,14 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
   Future<void> _loadVendors() async {
     try {
       final vendors = await VendorRepository(_client).getVendors();
+      if (!mounted) return;
       setState(() {
         _vendors = vendors;
         _loadingVendors = false;
-        final name = widget.prefill?.scanned?.vendorName;
-        if (name != null && name.trim().isNotEmpty) {
-          final match = _matchVendor(name);
-          if (match != null) {
-            _vendorId = match.id;
-          } else {
-            _scannedVendorName = name;
-            _scannedVendorGstin = widget.prefill?.scanned?.vendorGstin;
-          }
-        }
       });
+      await _resolveScannedVendor();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadError = e.toString();
         _loadingVendors = false;
@@ -103,28 +97,123 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
     }
   }
 
-  Vendor? _matchVendor(String name) {
-    final n = name.trim().toLowerCase();
-    for (final v in _vendors) {
-      if (v.vendorName.trim().toLowerCase() == n) return v;
-    }
-    for (final v in _vendors) {
+  // Vendor-resolution helpers — identical rules to the web bill scanner.
+  String _normGstin(String? s) => (s ?? '').toUpperCase().replaceAll(RegExp(r'\s'), '');
+  bool _isValidGstin(String? s) => RegExp(r'^[0-9]{2}[A-Z0-9]{13}$').hasMatch(_normGstin(s));
+  String _normCity(String? s) => (s ?? '').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+  /// Resolve the scanned vendor against existing vendors, mirroring web:
+  ///  1. same name + valid exact GSTIN   -> reuse
+  ///  2. same name + same city           -> reuse (a differing GSTIN is an OCR variant)
+  ///  3. same name, different/blank city -> ask the user to confirm (no auto-create)
+  ///  4. no name match                   -> check-duplicate, else auto-create the vendor
+  Future<void> _resolveScannedVendor() async {
+    final scanned = widget.prefill?.scanned;
+    final name = scanned?.vendorName?.trim();
+    if (scanned == null || name == null || name.isEmpty) return;
+
+    final scannedGstin = _isValidGstin(scanned.vendorGstin) ? _normGstin(scanned.vendorGstin) : null;
+    final scannedCity = _normCity(scanned.vendorCity);
+    final needle = name.toLowerCase();
+
+    bool nameMatches(Vendor v) {
       final vn = v.vendorName.trim().toLowerCase();
-      if (vn.isNotEmpty && (vn.contains(n) || n.contains(vn))) return v;
+      return vn.isNotEmpty && (vn.contains(needle) || needle.contains(vn));
     }
-    return null;
+    final nameMatched = _vendors.where(nameMatches).toList();
+
+    // 1. same name + exact valid GSTIN.
+    Vendor? matched;
+    if (scannedGstin != null) {
+      for (final v in nameMatched) {
+        if (_isValidGstin(v.gstin) && _normGstin(v.gstin) == scannedGstin) { matched = v; break; }
+      }
+    }
+    // 2. same name + same city.
+    if (matched == null && scannedCity.isNotEmpty) {
+      for (final v in nameMatched) {
+        if (_normCity(v.city) == scannedCity) { matched = v; break; }
+      }
+    }
+
+    if (matched != null) {
+      final id = matched.id;
+      setState(() => _vendorId = id);
+      return;
+    }
+
+    if (nameMatched.isNotEmpty) {
+      // Name matches but neither GSTIN nor city confirms it — a new branch or a misread.
+      // Do not auto-create; surface candidates so the user confirms.
+      setState(() {
+        _scannedVendorName = name;
+        _scannedVendorGstin = scanned.vendorGstin;
+        _vendorConfirmCandidates = nameMatched.take(5).toList();
+      });
+      return;
+    }
+
+    // 4. No confident match — widen with the duplicate check for near matches, but NEVER
+    //    auto-create. Surface the scanned vendor for the user to pick an existing one or create.
+    List<Vendor> candidates = [];
+    try {
+      final dups = await VendorRepository(_client).checkDuplicate(vendorName: name, gstin: scannedGstin ?? '');
+      candidates = dups.take(5).map((d) => Vendor.fromJson(d)).toList();
+      Map<String, dynamic>? strong;
+      for (final d in dups) {
+        final reason = d['reason']?.toString();
+        final score = (d['score'] is num) ? (d['score'] as num).toDouble() : 0.0;
+        final dCity = _normCity(d['city']?.toString());
+        if (reason == 'Same GSTIN') { strong = d; break; }
+        if (score < 0.90) continue;
+        // accept a strong fuzzy name match only when the city agrees (or one side has none)
+        if (scannedCity.isNotEmpty && dCity.isNotEmpty && dCity != scannedCity) continue;
+        strong = d; break;
+      }
+      if (strong != null) {
+        final v = Vendor.fromJson(strong);
+        if (!mounted) return;
+        setState(() {
+          if (!_vendors.any((x) => x.id == v.id)) _vendors = [v, ..._vendors];
+          _vendorId = v.id;
+        });
+        return;
+      }
+    } catch (_) {
+      // ignore — fall through to manual review
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _scannedVendorName = name;
+      _scannedVendorGstin = scanned.vendorGstin;
+      _vendorConfirmCandidates = candidates;
+    });
   }
 
   Future<void> _createScannedVendor() async {
+    final scanned = widget.prefill?.scanned;
     final name = _scannedVendorName;
     if (name == null) return;
     setState(() => _creatingVendor = true);
     try {
-      final v = await VendorRepository(_client).createVendor(vendorName: name, gstin: _scannedVendorGstin);
+      final validGstin = _isValidGstin(_scannedVendorGstin) ? _normGstin(_scannedVendorGstin) : null;
+      final v = await VendorRepository(_client).createVendor(
+        vendorName: name,
+        gstin: validGstin,
+        phone: scanned?.vendorPhone,
+        email: scanned?.vendorEmail,
+        contactPerson: scanned?.vendorContactPerson,
+        billingAddress: scanned?.vendorAddress,
+        city: scanned?.vendorCity,
+        state: scanned?.vendorState,
+        pincode: scanned?.vendorPincode,
+      );
       setState(() {
         _vendors = [v, ..._vendors];
         _vendorId = v.id;
         _scannedVendorName = null;
+        _vendorConfirmCandidates = [];
         _creatingVendor = false;
       });
     } catch (e) {
@@ -252,10 +341,17 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
                         children: [
                           const Icon(Icons.info_outline, size: 15, color: AppColors.warning),
                           const SizedBox(width: 8),
-                          Expanded(child: Text("Scanned vendor \"$_scannedVendorName\" not found.", style: const TextStyle(fontSize: 11.5, color: Color(0xFF856404)))),
+                          Expanded(
+                            child: Text(
+                              _vendorConfirmCandidates.isNotEmpty
+                                  ? "\"$_scannedVendorName\" may already exist (${_vendorConfirmCandidates.map((v) => (v.city == null || v.city!.isEmpty) ? v.vendorName : '${v.vendorName} – ${v.city}').join(', ')}). Select the correct vendor above, or create a new branch only if it's genuinely different."
+                                  : "Scanned vendor \"$_scannedVendorName\" not found.",
+                              style: const TextStyle(fontSize: 11.5, color: Color(0xFF856404)),
+                            ),
+                          ),
                           TextButton(
                             onPressed: _creatingVendor ? null : _createScannedVendor,
-                            child: Text(_creatingVendor ? '...' : 'Create'),
+                            child: Text(_creatingVendor ? '...' : (_vendorConfirmCandidates.isNotEmpty ? 'Create new' : 'Create')),
                           ),
                         ],
                       ),

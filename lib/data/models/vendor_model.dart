@@ -4,6 +4,7 @@ class Vendor {
   final String vendorName;
   final String? gstin;
   final String? phone;
+  final String? city;
 
   const Vendor({
     required this.id,
@@ -11,6 +12,7 @@ class Vendor {
     required this.vendorName,
     this.gstin,
     this.phone,
+    this.city,
   });
 
   factory Vendor.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class Vendor {
       vendorName: json['vendorName']?.toString() ?? '',
       gstin: json['gstin']?.toString(),
       phone: json['phone']?.toString(),
+      city: json['city']?.toString(),
     );
   }
 }

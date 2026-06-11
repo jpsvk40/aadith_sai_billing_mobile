@@ -48,6 +48,11 @@ class ApiConstants {
   static const String scanVendorBill = '/api/ai/scan-vendor-bill';
   static const String scanCreditNote = '/api/ai/scan-credit-note';
 
+  // "Ask your business" AI assistant (owner/admin, paid add-on)
+  static const String aiAssistantStatus = '/api/ai-assistant/status';
+  static const String aiAssistantAsk = '/api/ai-assistant/ask';
+  static const String aiAssistantTranscribe = '/api/ai-assistant/transcribe';
+
   // Mobile home (role-aware overview: financials + activity feed)
   static const String mobileHome = '/api/reports/mobile-home';
 
@@ -72,4 +77,15 @@ class ApiConstants {
 
   // Products
   static const String products = '/api/products';
+
+  // Projects (lite list — for Site-Logistics pickers)
+  static const String projects = '/api/projects';
+
+  // Site Logistics
+  static const String siteSurveys = '/api/project-sites/surveys';
+  static String siteSurveySubmit(String id) => '/api/project-sites/surveys/$id/submit';
+  static String siteSurveyApprove(String id) => '/api/project-sites/surveys/$id/approve';
+  static const String siteDeliveries = '/api/project-sites/deliveries';
+  static String siteDeliveryConfirm(String id) => '/api/project-sites/deliveries/$id/confirm';
+  static const String siteUpload = '/api/project-sites/upload';
 }

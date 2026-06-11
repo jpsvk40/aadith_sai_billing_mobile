@@ -23,10 +23,14 @@ import '../features/payments/screens/record_payment_screen.dart';
 import '../features/purchases/screens/purchase_list_screen.dart';
 import '../features/purchases/screens/purchase_create_screen.dart';
 import '../features/customers/screens/customer_list_screen.dart';
+import '../features/assistant/screens/ask_business_screen.dart';
 import '../data/models/order_model.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/shared/screens/unauthorized_screen.dart';
 import '../widgets/navigation/bottom_nav_bar.dart';
+import '../features/site_logistics/screens/site_logistics_screen.dart';
+import '../features/site_logistics/screens/survey_form_screen.dart';
+import '../features/site_logistics/screens/delivery_form_screen.dart';
 import 'route_guards.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -90,6 +94,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
             GoRoute(path: '/purchases', builder: (c, s) => const PurchaseListScreen()),
             GoRoute(path: '/purchases/create', builder: (c, s) => PurchaseCreateScreen(prefill: s.extra as PurchasePrefill?)),
+            GoRoute(path: '/site-logistics', builder: (c, s) => const SiteLogisticsScreen()),
+            GoRoute(path: '/site-logistics/survey', builder: (c, s) => const SurveyFormScreen()),
+            GoRoute(path: '/site-logistics/delivery', builder: (c, s) => const DeliveryFormScreen()),
             GoRoute(path: '/customers', builder: (c, s) => const CustomerListScreen()),
             GoRoute(
               path: '/invoices',
@@ -131,6 +138,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => const CommissionScreen(),
             ),
             GoRoute(path: '/alerts', builder: (c, s) => const AlertsScreen()),
+            GoRoute(path: '/ask-business', builder: (c, s) => const AskBusinessScreen()),
             GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
           ],
         ),

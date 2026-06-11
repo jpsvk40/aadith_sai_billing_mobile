@@ -612,10 +612,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _quickAccess() {
     final actions = [
       (Icons.add_shopping_cart, 'New Purchase', AppColors.primary, () => context.go('/purchases')),
+      (Icons.location_on_outlined, 'Site Logistics', const Color(0xFF0EA5E9), () => context.go('/site-logistics')),
       (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/payments?filter=Pending')),
       (Icons.receipt_long, 'Orders', _purple, () => context.go('/orders')),
       (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),
       (Icons.account_balance_wallet_outlined, 'Collections', const Color(0xFF0891B2), () => context.go('/collections')),
+      (Icons.auto_awesome, 'Ask AI', const Color(0xFF7C3AED), () => context.go('/ask-business')),
       (Icons.insights_outlined, 'Reports', AppColors.danger, () => _soon('Reports')),
     ];
     return Column(

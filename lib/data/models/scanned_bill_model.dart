@@ -2,6 +2,13 @@
 class ScannedBill {
   final String? vendorName;
   final String? vendorGstin;
+  final String? vendorPhone;
+  final String? vendorEmail;
+  final String? vendorContactPerson;
+  final String? vendorAddress;
+  final String? vendorCity;
+  final String? vendorState;
+  final String? vendorPincode;
   final String? invoiceNumber;
   final String? invoiceDate; // AI returns YYYY-MM-DD (kept as string)
   final double taxableAmount;
@@ -13,6 +20,13 @@ class ScannedBill {
   const ScannedBill({
     this.vendorName,
     this.vendorGstin,
+    this.vendorPhone,
+    this.vendorEmail,
+    this.vendorContactPerson,
+    this.vendorAddress,
+    this.vendorCity,
+    this.vendorState,
+    this.vendorPincode,
     this.invoiceNumber,
     this.invoiceDate,
     this.taxableAmount = 0,
@@ -33,6 +47,13 @@ class ScannedBill {
     return ScannedBill(
       vendorName: json['vendorName']?.toString(),
       vendorGstin: json['vendorGstin']?.toString(),
+      vendorPhone: json['vendorPhone']?.toString(),
+      vendorEmail: json['vendorEmail']?.toString(),
+      vendorContactPerson: json['vendorContactPerson']?.toString(),
+      vendorAddress: json['vendorAddress']?.toString(),
+      vendorCity: json['vendorCity']?.toString(),
+      vendorState: json['vendorState']?.toString(),
+      vendorPincode: json['vendorPincode']?.toString(),
       invoiceNumber: json['invoiceNumber']?.toString(),
       invoiceDate: json['invoiceDate']?.toString(),
       taxableAmount: n(json['taxableAmount']),
