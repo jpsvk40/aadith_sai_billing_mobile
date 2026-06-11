@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
@@ -32,6 +34,14 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   bool _transcribing = false;
   bool _speakAnswers = true; // read answers aloud
 
+  // hold-to-talk live state
+  StreamSubscription<Amplitude>? _ampSub;
+  Timer? _recTimer;
+  DateTime? _recStart;
+  String? _recPath;
+  double _amp = 0; // 0..1 normalized live mic level
+  int _recMs = 0;  // elapsed recording time
+
   AssistantStatus? _status;
   bool _loadingStatus = true;
   bool _sending = false;
@@ -54,6 +64,8 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
 
   @override
   void dispose() {
+    _ampSub?.cancel();
+    _recTimer?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     _rec.dispose();
@@ -72,29 +84,58 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     } catch (_) {/* TTS unavailable — silent */}
   }
 
-  Future<void> _toggleMic() async {
-    if (_transcribing || _sending) return;
-    if (_recording) {
-      final path = await _rec.stop();
-      if (mounted) setState(() => _recording = false);
-      if (path != null) await _transcribe(path);
-      return;
-    }
+  // Press-and-hold: start on touch-down.
+  Future<void> _startHold() async {
+    if (_recording || _transcribing || _sending) return;
     try {
       if (!await _rec.hasPermission()) {
         _toast('Microphone permission is needed for voice.');
         return;
       }
       final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/ask_${DateTime.now().millisecondsSinceEpoch}.wav';
+      _recPath = '${dir.path}/ask_${DateTime.now().millisecondsSinceEpoch}.wav';
       await _rec.start(
         const RecordConfig(encoder: AudioEncoder.wav, sampleRate: 16000, numChannels: 1),
-        path: filePath,
+        path: _recPath!,
       );
-      if (mounted) setState(() => _recording = true);
+      _recStart = DateTime.now();
+      HapticFeedback.mediumImpact();
+      // live mic level → drives the pulsing glow + waveform
+      _ampSub = _rec.onAmplitudeChanged(const Duration(milliseconds: 120)).listen((a) {
+        final norm = ((a.current + 45) / 45).clamp(0.0, 1.0);
+        if (mounted) setState(() => _amp = norm);
+      });
+      _recTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (_recStart != null && mounted) setState(() => _recMs = DateTime.now().difference(_recStart!).inMilliseconds);
+      });
+      if (mounted) setState(() { _recording = true; _recMs = 0; });
     } catch (_) {
       _toast('Could not start recording.');
     }
+  }
+
+  // Release (send:true) or drag-off / cancel (send:false).
+  Future<void> _stopHold({required bool send}) async {
+    if (!_recording) return;
+    final ms = _recStart != null ? DateTime.now().difference(_recStart!).inMilliseconds : 0;
+    await _ampSub?.cancel(); _ampSub = null;
+    _recTimer?.cancel(); _recTimer = null;
+    _recStart = null;
+    String? path;
+    try { path = await _rec.stop(); } catch (_) {}
+    if (mounted) setState(() { _recording = false; _amp = 0; _recMs = 0; });
+    // too short or cancelled → discard, no transcription
+    if (!send || ms < 600) {
+      if (send && ms < 600) _toast('Hold the mic and speak.');
+      if (path != null) { try { await File(path).delete(); } catch (_) {} }
+      return;
+    }
+    if (path != null) await _transcribe(path);
+  }
+
+  String _fmtElapsed(int ms) {
+    final s = (ms / 1000).floor();
+    return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
   }
 
   Future<void> _transcribe(String path) async {
@@ -245,11 +286,16 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
           Container(
             width: double.infinity,
             color: const Color(0xFFFEF2F2),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(children: const [
-              Icon(Icons.fiber_manual_record, color: AppColors.danger, size: 12),
-              SizedBox(width: 8),
-              Text('Listening… tap stop when done', style: TextStyle(fontSize: 12.5, color: Color(0xFF991B1B))),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(children: [
+              const Icon(Icons.fiber_manual_record, color: AppColors.danger, size: 12),
+              const SizedBox(width: 8),
+              Text(_fmtElapsed(_recMs),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF991B1B))),
+              const SizedBox(width: 12),
+              Expanded(child: _waveBar()),
+              const SizedBox(width: 12),
+              const Text('Release to send', style: TextStyle(fontSize: 12.5, color: Color(0xFF991B1B))),
             ]),
           ),
         _inputBar(),
@@ -268,6 +314,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
           const SizedBox(height: 6),
           const Text('Tamil, English or mixed — sales, collections, vendor dues, invoices…',
               textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+          const SizedBox(height: 6),
+          const Text('Type, or hold the 🎤 to talk',
+              textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
           const SizedBox(height: 18),
           Wrap(
             alignment: WrapAlignment.center,
@@ -303,6 +352,30 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     );
   }
 
+  Widget _waveBar() {
+    const n = 16;
+    return SizedBox(
+      height: 22,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(n, (i) {
+          final phase = 0.4 + ((i * 7) % 10) / 10.0; // per-bar variation so it looks alive
+          final h = (4 + 18 * _amp * phase).clamp(4.0, 22.0);
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 110),
+            width: 3,
+            height: h,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              color: AppColors.danger.withValues(alpha: 0.75),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
   Widget _inputBar() {
     return SafeArea(
       top: false,
@@ -331,14 +404,34 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              tooltip: _recording ? 'Stop' : 'Speak',
-              icon: _transcribing
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(_recording ? Icons.stop_circle : Icons.mic_none,
-                      color: _recording ? AppColors.danger : AppColors.primary, size: 26),
-              onPressed: (_transcribing || _sending) ? null : _toggleMic,
-            ),
+            _transcribing
+                ? const SizedBox(width: 46, height: 46, child: Padding(padding: EdgeInsets.all(13), child: CircularProgressIndicator(strokeWidth: 2)))
+                : Tooltip(
+                    message: 'Hold to talk',
+                    child: Listener(
+                      onPointerDown: (_) { if (!_sending) _startHold(); },
+                      onPointerUp: (_) => _stopHold(send: true),
+                      onPointerCancel: (_) => _stopHold(send: false),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        width: _recording ? 54 : 46,
+                        height: _recording ? 54 : 46,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _recording ? AppColors.danger : const Color(0xFFEFF3FF),
+                          boxShadow: _recording
+                              ? [BoxShadow(
+                                  color: AppColors.danger.withValues(alpha: 0.30 + 0.45 * _amp),
+                                  blurRadius: 8 + 24 * _amp,
+                                  spreadRadius: 1 + 9 * _amp,
+                                )]
+                              : null,
+                        ),
+                        child: Icon(_recording ? Icons.mic : Icons.mic_none,
+                            color: _recording ? Colors.white : AppColors.primary, size: _recording ? 26 : 24),
+                      ),
+                    ),
+                  ),
             const SizedBox(width: 2),
             CircleAvatar(
               backgroundColor: AppColors.primary,
