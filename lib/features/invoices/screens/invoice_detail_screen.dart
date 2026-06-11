@@ -5,6 +5,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/invoice_model.dart';
+import '../../../data/network/api_client.dart';
+import '../../../data/repositories/invoice_repository.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../providers/invoice_detail_provider.dart';
@@ -30,6 +33,28 @@ class InvoiceDetailScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _sendWhatsApp(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Sending on WhatsApp…')));
+    try {
+      final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
+      await InvoiceRepository(client).sendWhatsApp(invoiceId);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('✓ Sent on WhatsApp')));
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      final s = e.toString().toLowerCase();
+      final msg = (s.contains('403') || s.contains('not enabled'))
+          ? "WhatsApp invoicing isn't enabled for your company."
+          : (s.contains('503') || s.contains('not configured'))
+              ? "WhatsApp isn't set up on the server yet."
+              : (s.contains('400') || s.contains('no valid'))
+                  ? 'Customer has no valid WhatsApp/phone number.'
+                  : 'Could not send on WhatsApp. Please try again.';
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(invoiceDetailProvider(invoiceId));
@@ -39,6 +64,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/invoices')),
         title: const Text('Invoice Detail'),
         actions: [
+          IconButton(
+            tooltip: 'Send on WhatsApp',
+            icon: const Icon(Icons.chat, color: AppColors.white),
+            onPressed: () => _sendWhatsApp(context, ref),
+          ),
           TextButton.icon(
             onPressed: () => context.go('/payments/record?invoiceId=$invoiceId'),
             icon: const Icon(Icons.payment, color: AppColors.white, size: 18),

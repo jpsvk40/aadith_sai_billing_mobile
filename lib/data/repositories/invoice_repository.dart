@@ -25,4 +25,9 @@ class InvoiceRepository {
     final data = await _client.get(ApiConstants.invoiceDetail(id));
     return Invoice.fromJson(data['invoice'] ?? data);
   }
+
+  /// Send this invoice to the customer's WhatsApp via the shared platform number.
+  Future<void> sendWhatsApp(String id, {String? to}) async {
+    await _client.post('/invoices/$id/whatsapp', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+  }
 }
