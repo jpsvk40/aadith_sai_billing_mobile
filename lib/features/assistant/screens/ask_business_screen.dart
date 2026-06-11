@@ -14,8 +14,13 @@ import '../../../data/repositories/ai_assistant_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// "Ask your business" — owner/admin conversational assistant (read-only).
-/// Voice will plug into the same flow via /ai-assistant/transcribe once a
-/// recorder package + the Sarvam key are added.
+/// Supports typed input, press-and-hold one-shot voice, and a fully hands-free
+/// "voice mode" (listen → auto-stop on silence → answer → speak → re-listen),
+/// with tap-to-stop to interrupt.
+
+/// Hands-free conversation state machine.
+enum _VoiceState { off, listening, processing, speaking, paused }
+
 class AskBusinessScreen extends ConsumerStatefulWidget {
   const AskBusinessScreen({super.key});
   @override
@@ -42,6 +47,18 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   double _amp = 0; // 0..1 normalized live mic level
   int _recMs = 0;  // elapsed recording time
 
+  // hands-free voice mode
+  _VoiceState _vstate = _VoiceState.off;
+  Timer? _vadTimer;        // polls for end-of-speech / timeouts
+  Timer? _ttsSafety;       // failsafe if TTS completion never fires
+  DateTime? _lastLoud;     // last time mic level crossed the speech threshold
+  bool _heardSpeech = false;
+  int _genToken = 0;       // bumped to discard a stale/cancelled turn
+  static const double _speechThreshold = 0.12; // normalized level counted as speech
+  static const int _silenceMs = 1400;  // trailing silence that ends a turn
+  static const int _noSpeechMs = 8000; // give up listening if nothing is said
+  static const int _maxTurnMs = 20000; // hard cap on one spoken question
+
   AssistantStatus? _status;
   bool _loadingStatus = true;
   bool _sending = false;
@@ -59,6 +76,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     super.initState();
     _client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
     _repo = AiAssistantRepository(_client);
+    // When the assistant finishes speaking in voice mode, reopen the mic for the next turn.
+    _tts.setCompletionHandler(_onTtsDone);
+    _tts.setCancelHandler(() {}); // manual stop transitions are handled inline
     _loadStatus();
   }
 
@@ -66,6 +86,8 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   void dispose() {
     _ampSub?.cancel();
     _recTimer?.cancel();
+    _vadTimer?.cancel();
+    _ttsSafety?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     _rec.dispose();
@@ -136,6 +158,169 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   String _fmtElapsed(int ms) {
     final s = (ms / 1000).floor();
     return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  // ── hands-free voice mode ────────────────────────────────────────────────
+  Future<void> _enterVoiceMode() async {
+    if (_vstate != _VoiceState.off) return;
+    if (_recording) await _stopHold(send: false); // drop any one-shot capture
+    await _listenTurn();
+  }
+
+  Future<void> _exitVoiceMode() async {
+    _genToken++;
+    await _ampSub?.cancel(); _ampSub = null;
+    _vadTimer?.cancel(); _vadTimer = null;
+    _ttsSafety?.cancel(); _ttsSafety = null;
+    try { await _rec.stop(); } catch (_) {}
+    await _tts.stop();
+    _recStart = null;
+    if (mounted) setState(() { _vstate = _VoiceState.off; _amp = 0; _recMs = 0; });
+  }
+
+  Future<void> _listenTurn() async {
+    if (_vstate == _VoiceState.off && _recStart != null) return;
+    try {
+      if (!await _rec.hasPermission()) {
+        _toast('Microphone permission is needed for voice.');
+        await _exitVoiceMode();
+        return;
+      }
+      final dir = await getTemporaryDirectory();
+      _recPath = '${dir.path}/ask_${DateTime.now().millisecondsSinceEpoch}.wav';
+      await _rec.start(
+        const RecordConfig(encoder: AudioEncoder.wav, sampleRate: 16000, numChannels: 1),
+        path: _recPath!,
+      );
+      _recStart = DateTime.now();
+      _heardSpeech = false;
+      _lastLoud = null;
+      _ampSub = _rec.onAmplitudeChanged(const Duration(milliseconds: 120)).listen((a) {
+        final norm = ((a.current + 45) / 45).clamp(0.0, 1.0);
+        _amp = norm;
+        if (norm > _speechThreshold) { _heardSpeech = true; _lastLoud = DateTime.now(); }
+        if (mounted) setState(() {});
+      });
+      _vadTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _onVadTick());
+      if (mounted) setState(() { _vstate = _VoiceState.listening; _recMs = 0; });
+    } catch (_) {
+      _toast('Could not start listening.');
+      await _exitVoiceMode();
+    }
+  }
+
+  void _onVadTick() {
+    if (_vstate != _VoiceState.listening || _recStart == null) return;
+    final now = DateTime.now();
+    final elapsed = now.difference(_recStart!).inMilliseconds;
+    if (mounted) setState(() => _recMs = elapsed);
+    if (elapsed > _maxTurnMs) { _finishListening(process: _heardSpeech); return; }
+    if (!_heardSpeech) {
+      if (elapsed > _noSpeechMs) _finishListening(process: false, pause: true);
+      return;
+    }
+    if (_lastLoud != null && now.difference(_lastLoud!).inMilliseconds > _silenceMs) {
+      _finishListening(process: true);
+    }
+  }
+
+  Future<void> _finishListening({required bool process, bool pause = false}) async {
+    await _ampSub?.cancel(); _ampSub = null;
+    _vadTimer?.cancel(); _vadTimer = null;
+    _recStart = null;
+    String? path;
+    try { path = await _rec.stop(); } catch (_) {}
+    if (mounted) setState(() => _amp = 0);
+    if (_vstate == _VoiceState.off) return;
+    if (!process) {
+      if (path != null) { try { await File(path).delete(); } catch (_) {} }
+      if (pause) { if (mounted) setState(() => _vstate = _VoiceState.paused); }
+      else { await _listenTurn(); }
+      return;
+    }
+    if (mounted) setState(() => _vstate = _VoiceState.processing);
+    if (path == null) { await _listenTurn(); return; }
+    final myToken = ++_genToken;
+    String text = '';
+    try { text = await _repo.transcribe(path); } catch (_) {}
+    try { await File(path).delete(); } catch (_) {}
+    if (_vstate == _VoiceState.off || myToken != _genToken) return; // cancelled
+    if (text.trim().isEmpty) { await _listenTurn(); return; } // heard nothing usable
+    await _voiceAsk(text.trim(), myToken);
+  }
+
+  Future<void> _voiceAsk(String q, int myToken) async {
+    setState(() {
+      _turns.add(AssistantTurn(isUser: true, text: q));
+      _turns.add(const AssistantTurn(isUser: false, text: '', loading: true));
+    });
+    _scrollToEnd();
+    String answerText;
+    try {
+      final ans = await _repo.ask(q);
+      answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
+    } catch (e) {
+      answerText = _friendlyError(e);
+    }
+    // Always resolve the loading bubble; only continue the loop if still current.
+    _replaceLast(AssistantTurn(isUser: false, text: answerText));
+    _scrollToEnd();
+    if (_vstate == _VoiceState.off || myToken != _genToken) return; // interrupted
+    if (_speakAnswers) {
+      if (mounted) setState(() => _vstate = _VoiceState.speaking);
+      _ttsSafety?.cancel();
+      _ttsSafety = Timer(const Duration(seconds: 30), () { if (_vstate == _VoiceState.speaking) _onTtsDone(); });
+      await _speak(answerText);
+    } else {
+      await _listenTurn();
+    }
+  }
+
+  void _onTtsDone() {
+    _ttsSafety?.cancel(); _ttsSafety = null;
+    if (_vstate == _VoiceState.speaking) _listenTurn();
+  }
+
+  // The big orb is state-aware: submit early while listening, STOP while
+  // thinking/speaking (tap-to-interrupt), resume when paused.
+  void _voiceTap() {
+    switch (_vstate) {
+      case _VoiceState.listening:
+        _finishListening(process: _heardSpeech);
+        break;
+      case _VoiceState.processing:
+        _genToken++; // discard the in-flight result
+        _resolveLoadingBubble();
+        _listenTurn();
+        break;
+      case _VoiceState.speaking:
+        _genToken++;
+        _ttsSafety?.cancel(); _ttsSafety = null;
+        _tts.stop();
+        _listenTurn();
+        break;
+      case _VoiceState.paused:
+        _listenTurn();
+        break;
+      case _VoiceState.off:
+        break;
+    }
+  }
+
+  void _resolveLoadingBubble() {
+    if (_turns.isNotEmpty && _turns.last.loading) {
+      _replaceLast(const AssistantTurn(isUser: false, text: '(stopped)'));
+    }
+  }
+
+  (String, String) _voiceLabels() {
+    switch (_vstate) {
+      case _VoiceState.listening: return ('Listening…', 'Speak now — tap when done');
+      case _VoiceState.processing: return ('Thinking…', 'Tap to stop');
+      case _VoiceState.speaking: return ('Speaking…', 'Tap to stop & ask again');
+      case _VoiceState.paused: return ('Tap to talk', 'Voice mode paused');
+      case _VoiceState.off: return ('', '');
+    }
   }
 
   Future<void> _transcribe(String path) async {
@@ -230,6 +415,13 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
           onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
         ),
         actions: [
+          if (_status?.enabled == true)
+            IconButton(
+              tooltip: _vstate == _VoiceState.off ? 'Hands-free voice mode' : 'Exit voice mode',
+              icon: Icon(_vstate == _VoiceState.off ? Icons.graphic_eq : Icons.stop_circle,
+                  color: _vstate == _VoiceState.off ? null : AppColors.danger),
+              onPressed: () => _vstate == _VoiceState.off ? _enterVoiceMode() : _exitVoiceMode(),
+            ),
           IconButton(
             tooltip: _speakAnswers ? 'Mute voice' : 'Speak answers',
             icon: Icon(_speakAnswers ? Icons.volume_up : Icons.volume_off),
@@ -282,7 +474,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
                   itemBuilder: (_, i) => _bubble(_turns[i]),
                 ),
         ),
-        if (_recording)
+        if (_vstate == _VoiceState.off && _recording)
           Container(
             width: double.infinity,
             color: const Color(0xFFFEF2F2),
@@ -298,8 +490,75 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
               const Text('Release to send', style: TextStyle(fontSize: 12.5, color: Color(0xFF991B1B))),
             ]),
           ),
-        _inputBar(),
+        _vstate == _VoiceState.off ? _inputBar() : _voicePanel(),
       ],
+    );
+  }
+
+  Widget _voicePanel() {
+    final (label, sub) = _voiceLabels();
+    final listening = _vstate == _VoiceState.listening;
+    final speaking = _vstate == _VoiceState.speaking;
+    final processing = _vstate == _VoiceState.processing;
+    final orbColor = listening
+        ? AppColors.primary
+        : speaking
+            ? AppColors.danger
+            : processing
+                ? const Color(0xFF6366F1)
+                : const Color(0xFF94A3B8);
+    final icon = listening
+        ? Icons.mic
+        : (speaking || processing)
+            ? Icons.stop_rounded
+            : Icons.mic_none;
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+          const SizedBox(height: 2),
+          Text(sub, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: _voiceTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: orbColor.withValues(alpha: 0.12),
+                boxShadow: listening
+                    ? [BoxShadow(color: orbColor.withValues(alpha: 0.25 + 0.45 * _amp), blurRadius: 10 + 26 * _amp, spreadRadius: 2 + 9 * _amp)]
+                    : null,
+              ),
+              child: Icon(icon, color: orbColor, size: 38),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 16,
+            child: listening
+                ? Text(_fmtElapsed(_recMs), style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)))
+                : (processing
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const SizedBox.shrink()),
+          ),
+          const SizedBox(height: 6),
+          TextButton.icon(
+            onPressed: _exitVoiceMode,
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Exit voice mode'),
+          ),
+        ]),
+      ),
     );
   }
 
