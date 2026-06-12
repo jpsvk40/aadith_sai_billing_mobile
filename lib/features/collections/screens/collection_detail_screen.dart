@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/errors/app_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
@@ -68,11 +69,19 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   String _waErr(Object e) {
-    final s = e.toString().toLowerCase();
-    if (s.contains('403') || s.contains('not enabled')) return "WhatsApp invoicing isn't enabled for your company.";
-    if (s.contains('503') || s.contains('not configured')) return "WhatsApp isn't set up on the server yet.";
-    if (s.contains('400') || s.contains('no valid')) return 'No valid WhatsApp/phone number.';
-    return 'Could not send on WhatsApp. Please try again.';
+    final raw = (e is AppException) ? e.message : e.toString();
+    final s = raw.toLowerCase();
+    if (s.contains('not enabled')) return "WhatsApp invoicing isn't enabled for your company.";
+    if (s.contains('not configured')) return "WhatsApp isn't set up on the server yet.";
+    if (s.contains('allowed list') || s.contains('not in allowed') || s.contains('whitelist')) {
+      return "This number isn't on your WhatsApp test-recipient list. Add it in WhatsApp Manager, or use a production number.";
+    }
+    if (e is NetworkException || s.contains('timed out') || s.contains('timeout')) {
+      return 'No response from the server (it may be waking up). Please try again.';
+    }
+    if (s.contains('no valid')) return 'Customer has no valid WhatsApp/phone number.';
+    // surface the real server/Meta reason instead of a generic message
+    return raw.isNotEmpty ? 'Could not send: $raw' : 'Could not send on WhatsApp. Please try again.';
   }
 
   Future<void> _doSend(BuildContext context, WidgetRef ref, String label, String initialTo, Future<void> Function(CollectionRepository repo, String to) action) async {

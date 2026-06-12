@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/errors/app_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
@@ -44,14 +45,17 @@ class InvoiceDetailScreen extends ConsumerWidget {
       messenger.showSnackBar(const SnackBar(content: Text('✓ Sent on WhatsApp')));
     } catch (e) {
       messenger.hideCurrentSnackBar();
-      final s = e.toString().toLowerCase();
-      final msg = (s.contains('403') || s.contains('not enabled'))
+      final raw = (e is AppException) ? e.message : e.toString();
+      final s = raw.toLowerCase();
+      final msg = s.contains('not enabled')
           ? "WhatsApp invoicing isn't enabled for your company."
-          : (s.contains('503') || s.contains('not configured'))
+          : s.contains('not configured')
               ? "WhatsApp isn't set up on the server yet."
-              : (s.contains('400') || s.contains('no valid'))
-                  ? 'Customer has no valid WhatsApp/phone number.'
-                  : 'Could not send on WhatsApp. Please try again.';
+              : (s.contains('allowed list') || s.contains('not in allowed') || s.contains('whitelist'))
+                  ? "This number isn't on your WhatsApp test-recipient list. Add it in WhatsApp Manager, or use a production number."
+                  : s.contains('no valid')
+                      ? 'Customer has no valid WhatsApp/phone number.'
+                      : (raw.isNotEmpty ? 'Could not send: $raw' : 'Could not send on WhatsApp. Please try again.');
       messenger.showSnackBar(SnackBar(content: Text(msg)));
     }
   }
