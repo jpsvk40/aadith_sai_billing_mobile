@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -66,7 +67,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Send on WhatsApp',
-            icon: const Icon(Icons.chat, color: AppColors.white),
+            icon: const FaIcon(FontAwesomeIcons.whatsapp, color: AppColors.white, size: 20),
             onPressed: () => _sendWhatsApp(context, ref),
           ),
           TextButton.icon(

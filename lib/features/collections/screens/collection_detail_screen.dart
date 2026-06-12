@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -18,22 +19,32 @@ class CollectionDetailScreen extends ConsumerWidget {
   const CollectionDetailScreen({super.key, required this.collectionId});
 
   Widget _waActions(BuildContext context, WidgetRef ref, Collection c) {
-    return Row(children: [
-      Expanded(
-        child: OutlinedButton.icon(
-          onPressed: c.invoiceId == null ? null : () => _sendInvoice(context, ref, c),
-          icon: const Icon(Icons.chat, size: 18, color: Color(0xFF128C7E)),
-          label: const Text('Invoice'),
-        ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(
+        padding: EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          FaIcon(FontAwesomeIcons.whatsapp, size: 16, color: Color(0xFF25D366)),
+          SizedBox(width: 6),
+          Text('Send on WhatsApp', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF128C7E))),
+        ]),
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: OutlinedButton.icon(
-          onPressed: c.payments.isEmpty ? null : () => _sendReceipt(context, ref, c),
-          icon: const Icon(Icons.receipt_long, size: 18, color: Color(0xFF25D366)),
-          label: const Text('Receipt'),
+      Row(children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: c.invoiceId == null ? null : () => _sendInvoice(context, ref, c),
+            icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18, color: Color(0xFF25D366)),
+            label: const Text('Invoice'),
+          ),
         ),
-      ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: c.payments.isEmpty ? null : () => _sendReceipt(context, ref, c),
+            icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18, color: Color(0xFF25D366)),
+            label: const Text('Receipt'),
+          ),
+        ),
+      ]),
     ]);
   }
 
@@ -64,8 +75,8 @@ class CollectionDetailScreen extends ConsumerWidget {
     return 'Could not send on WhatsApp. Please try again.';
   }
 
-  Future<void> _doSend(BuildContext context, WidgetRef ref, String label, Future<void> Function(CollectionRepository repo, String to) action) async {
-    final to = await _promptNumber(context, 'Send $label on WhatsApp', '');
+  Future<void> _doSend(BuildContext context, WidgetRef ref, String label, String initialTo, Future<void> Function(CollectionRepository repo, String to) action) async {
+    final to = await _promptNumber(context, 'Send $label on WhatsApp', initialTo);
     if (to == null || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(SnackBar(content: Text('Sending $label…')));
@@ -81,10 +92,10 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _sendInvoice(BuildContext context, WidgetRef ref, Collection c) =>
-      _doSend(context, ref, 'Invoice', (repo, to) => repo.sendInvoiceWhatsApp(c.invoiceId!, to: to));
+      _doSend(context, ref, 'Invoice', c.customerPhone ?? '', (repo, to) => repo.sendInvoiceWhatsApp(c.invoiceId!, to: to));
 
   Future<void> _sendReceipt(BuildContext context, WidgetRef ref, Collection c) =>
-      _doSend(context, ref, 'Receipt', (repo, to) => repo.sendReceiptWhatsApp(c.payments.last.id, to: to));
+      _doSend(context, ref, 'Receipt', c.customerPhone ?? '', (repo, to) => repo.sendReceiptWhatsApp(c.payments.last.id, to: to));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

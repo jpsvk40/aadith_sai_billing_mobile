@@ -48,6 +48,7 @@ class Collection {
   final String? invoiceId;
   final String? customerId;
   final String? customerName;
+  final String? customerPhone;
   final String? representativeId;
   final String? representativeName;
   final double totalOutstanding;
@@ -63,6 +64,7 @@ class Collection {
     this.invoiceId,
     this.customerId,
     this.customerName,
+    this.customerPhone,
     this.representativeId,
     this.representativeName,
     required this.totalOutstanding,
@@ -85,6 +87,11 @@ class Collection {
           json['invoice']?['customer']?['customerName'] ??
           json['customer']?['customerName'] ??
           json['customerName'],
+      customerPhone: (json['invoice']?['customer']?['whatsappContact'] ??
+              json['invoice']?['customer']?['phone'] ??
+              json['customer']?['whatsappContact'] ??
+              json['customer']?['phone'])
+          ?.toString(),
       representativeId:
           json['collectionRepId']?.toString() ??
           json['representativeId']?.toString(),

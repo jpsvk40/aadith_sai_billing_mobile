@@ -28,6 +28,8 @@ class InvoiceRepository {
 
   /// Send this invoice to the customer's WhatsApp via the shared platform number.
   Future<void> sendWhatsApp(String id, {String? to}) async {
-    await _client.post('/invoices/$id/whatsapp', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+    await _client.post('/invoices/$id/whatsapp',
+        data: (to != null && to.isNotEmpty) ? {'to': to} : {},
+        timeout: const Duration(seconds: 120));
   }
 }

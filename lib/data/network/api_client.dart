@@ -36,9 +36,15 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> post(String path, {dynamic data}) async {
+  Future<dynamic> post(String path, {dynamic data, Duration? timeout}) async {
     try {
-      final response = await _dio.post(path, data: data);
+      final response = await _dio.post(
+        path,
+        data: data,
+        // Some posts (WhatsApp PDF render + send) take far longer than the
+        // default 30s, especially on a cold backend. Allow a per-call override.
+        options: timeout != null ? Options(receiveTimeout: timeout) : null,
+      );
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);

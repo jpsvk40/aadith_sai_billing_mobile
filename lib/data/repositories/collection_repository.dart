@@ -30,12 +30,16 @@ class CollectionRepository {
 
   /// Send the invoice PDF to the customer's WhatsApp.
   Future<void> sendInvoiceWhatsApp(String invoiceId, {String? to}) async {
-    await _client.post('/invoices/$invoiceId/whatsapp', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+    await _client.post('/invoices/$invoiceId/whatsapp',
+        data: (to != null && to.isNotEmpty) ? {'to': to} : {},
+        timeout: const Duration(seconds: 120));
   }
 
   /// Send a payment-receipt PDF for a collection payment to the customer's WhatsApp.
   Future<void> sendReceiptWhatsApp(String paymentId, {String? to}) async {
-    await _client.post('/collections/payment/$paymentId/whatsapp-receipt', data: (to != null && to.isNotEmpty) ? {'to': to} : {});
+    await _client.post('/collections/payment/$paymentId/whatsapp-receipt',
+        data: (to != null && to.isNotEmpty) ? {'to': to} : {},
+        timeout: const Duration(seconds: 120));
   }
 
   Future<void> recordCollectionPayment(
