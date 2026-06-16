@@ -106,7 +106,8 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
   ///  1. same name + valid exact GSTIN   -> reuse
   ///  2. same name + same city           -> reuse (a differing GSTIN is an OCR variant)
   ///  3. same name, different/blank city -> ask the user to confirm (no auto-create)
-  ///  4. no name match                   -> check-duplicate, else auto-create the vendor
+  ///  4. no name match                   -> check-duplicate; if no strong match, surface the
+  ///     scanned vendor for the user to pick an existing one or explicitly create (never auto-create)
   Future<void> _resolveScannedVendor() async {
     final scanned = widget.prefill?.scanned;
     final name = scanned?.vendorName?.trim();
@@ -208,6 +209,7 @@ class _PurchaseCreateScreenState extends ConsumerState<PurchaseCreateScreen> {
         city: scanned?.vendorCity,
         state: scanned?.vendorState,
         pincode: scanned?.vendorPincode,
+        forceCreate: true, // user explicitly chose to create after reviewing candidates
       );
       setState(() {
         _vendors = [v, ..._vendors];

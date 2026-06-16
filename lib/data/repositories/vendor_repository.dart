@@ -34,10 +34,14 @@ class VendorRepository {
     String? city,
     String? state,
     String? pincode,
+    bool forceCreate = false,
   }) async {
     bool ok(String? v) => v != null && v.trim().isNotEmpty;
     final data = await _client.post(ApiConstants.vendors, data: {
       'vendorName': vendorName,
+      // The server rejects a create that collides with an existing valid GSTIN unless
+      // forceCreate is set. Pass it when the user has explicitly chosen to create anyway.
+      if (forceCreate) 'forceCreate': true,
       if (ok(gstin)) 'gstin': gstin,
       if (ok(phone)) 'phone': phone,
       if (ok(email)) 'email': email,
