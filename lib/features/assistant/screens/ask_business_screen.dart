@@ -265,7 +265,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       answerText = _friendlyError(e);
     }
     // Always resolve the loading bubble; only continue the loop if still current.
-    _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const []));
+    _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const [], animate: true));
     _scrollToEnd();
     if (_vstate == _VoiceState.off || myToken != _genToken) return; // interrupted
     if (_speakAnswers) {
@@ -376,7 +376,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     try {
       final ans = await _repo.ask(q, history: history);
       final answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
-      _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data));
+      _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data, animate: true));
       _speak(answerText);
     } catch (e) {
       _replaceLast(AssistantTurn(isUser: false, text: _friendlyError(e)));
@@ -485,6 +485,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
                     final isLast = i == _turns.length - 1;
                     final rows = t.isUser ? null : _extractRows(t.data);
                     return Column(
+                      key: ValueKey(i),
                       crossAxisAlignment: t.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                       children: [
                         _bubble(t),
@@ -627,7 +628,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
         child: t.loading
             ? const SizedBox(
                 width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(t.text, style: TextStyle(color: fg, fontSize: 14.5, height: 1.35)),
+            : (t.animate
+                ? _TypewriterText(t.text, style: TextStyle(color: fg, fontSize: 14.5, height: 1.35))
+                : Text(t.text, style: TextStyle(color: fg, fontSize: 14.5, height: 1.35))),
       ),
     );
   }
@@ -796,4 +799,50 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       ),
     );
   }
+}
+
+/// Reveals text progressively for a "typing" feel. Animates once on first build.
+class _TypewriterText extends StatefulWidget {
+  final String text;
+  final TextStyle? style;
+  const _TypewriterText(this.text, {this.style});
+  @override
+  State<_TypewriterText> createState() => _TypewriterTextState();
+}
+
+class _TypewriterTextState extends State<_TypewriterText> {
+  int _n = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  void _start() {
+    _timer?.cancel();
+    _n = 0;
+    if (widget.text.isEmpty) return;
+    _timer = Timer.periodic(const Duration(milliseconds: 16), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() {
+        _n += 2;
+        if (_n >= widget.text.length) { _n = widget.text.length; t.cancel(); }
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _TypewriterText old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) _start(); // re-animate only when the text actually changes
+  }
+
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(widget.text.substring(0, _n.clamp(0, widget.text.length)), style: widget.style);
 }

@@ -38,6 +38,7 @@ class AssistantTurn {
   final bool loading;
   final List<String> suggestions; // follow-up chips (assistant turns)
   final List<dynamic> data; // tool results, for a mini table (assistant turns)
+  final bool animate; // typewriter-reveal this answer
 
   const AssistantTurn({
     required this.isUser,
@@ -45,5 +46,6 @@ class AssistantTurn {
     this.loading = false,
     this.suggestions = const [],
     this.data = const [],
+    this.animate = false,
   });
 }
