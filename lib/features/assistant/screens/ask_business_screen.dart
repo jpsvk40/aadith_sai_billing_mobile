@@ -250,20 +250,22 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   }
 
   Future<void> _voiceAsk(String q, int myToken) async {
+    final history = _historyFromTurns();
     setState(() {
       _turns.add(AssistantTurn(isUser: true, text: q));
       _turns.add(const AssistantTurn(isUser: false, text: '', loading: true));
     });
     _scrollToEnd();
     String answerText;
+    AssistantAnswer? ans;
     try {
-      final ans = await _repo.ask(q);
+      ans = await _repo.ask(q, history: history);
       answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
     } catch (e) {
       answerText = _friendlyError(e);
     }
     // Always resolve the loading bubble; only continue the loop if still current.
-    _replaceLast(AssistantTurn(isUser: false, text: answerText));
+    _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const []));
     _scrollToEnd();
     if (_vstate == _VoiceState.off || myToken != _genToken) return; // interrupted
     if (_speakAnswers) {
@@ -354,10 +356,17 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     }
   }
 
+  // Prior turns (excluding loading bubbles) give the assistant context for follow-ups.
+  List<Map<String, String>> _historyFromTurns() => _turns
+      .where((t) => !t.loading && t.text.trim().isNotEmpty)
+      .map((t) => {'role': t.isUser ? 'user' : 'assistant', 'content': t.text})
+      .toList();
+
   Future<void> _send([String? preset]) async {
     final q = (preset ?? _inputCtrl.text).trim();
     if (q.isEmpty || _sending) return;
     _inputCtrl.clear();
+    final history = _historyFromTurns();
     setState(() {
       _turns.add(AssistantTurn(isUser: true, text: q));
       _turns.add(const AssistantTurn(isUser: false, text: '', loading: true));
@@ -365,9 +374,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     });
     _scrollToEnd();
     try {
-      final ans = await _repo.ask(q);
+      final ans = await _repo.ask(q, history: history);
       final answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
-      _replaceLast(AssistantTurn(isUser: false, text: answerText));
+      _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data));
       _speak(answerText);
     } catch (e) {
       _replaceLast(AssistantTurn(isUser: false, text: _friendlyError(e)));
@@ -471,7 +480,19 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(14),
                   itemCount: _turns.length,
-                  itemBuilder: (_, i) => _bubble(_turns[i]),
+                  itemBuilder: (_, i) {
+                    final t = _turns[i];
+                    final isLast = i == _turns.length - 1;
+                    final rows = t.isUser ? null : _extractRows(t.data);
+                    return Column(
+                      crossAxisAlignment: t.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                      children: [
+                        _bubble(t),
+                        if (rows != null) _dataTable(rows),
+                        if (isLast && !t.isUser && !_sending && t.suggestions.isNotEmpty) _followups(t.suggestions),
+                      ],
+                    );
+                  },
                 ),
         ),
         if (_vstate == _VoiceState.off && _recording)
@@ -610,6 +631,75 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       ),
     );
   }
+
+  // Pull the first list-of-rows from the tool results for a compact table.
+  List<Map<String, dynamic>>? _extractRows(List<dynamic> data) {
+    for (final d in data) {
+      final res = (d is Map) ? d['result'] : null;
+      if (res is Map) {
+        for (final v in res.values) {
+          if (v is List && v.isNotEmpty && v.first is Map) {
+            return v.take(5).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  String _fmtCell(String key, dynamic v) {
+    if (v is num) {
+      final grouped = v.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+      final money = RegExp(r'owed|amount|total|outstanding|paid|balance|value|payable|sales', caseSensitive: false).hasMatch(key);
+      return money ? '₹$grouped' : grouped;
+    }
+    return v?.toString() ?? '';
+  }
+
+  Widget _dataTable(List<Map<String, dynamic>> rows) {
+    final cols = rows.first.keys.take(3).toList();
+    Widget cell(String text, {bool header = false}) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            child: Text(text,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: header ? 11.5 : 12,
+                  color: header ? const Color(0xFF64748B) : const Color(0xFF334155),
+                  fontWeight: header ? FontWeight.w600 : FontWeight.w400,
+                )),
+          ),
+        );
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 6),
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(children: [
+        Container(color: const Color(0xFFF8FAFC), child: Row(children: cols.map((c) => cell(c, header: true)).toList())),
+        ...rows.map((r) => Row(children: cols.map((c) => cell(_fmtCell(c, r[c]))).toList())),
+      ]),
+    );
+  }
+
+  Widget _followups(List<String> suggestions) => Padding(
+        padding: const EdgeInsets.only(top: 2, bottom: 4),
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: suggestions
+              .map((s) => ActionChip(
+                    label: Text(s, style: const TextStyle(fontSize: 12.5, color: Color(0xFF4338CA))),
+                    onPressed: _sending ? null : () => _send(s),
+                    backgroundColor: const Color(0xFFEEF2FF),
+                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                  ))
+              .toList(),
+        ),
+      );
 
   Widget _waveBar() {
     const n = 16;

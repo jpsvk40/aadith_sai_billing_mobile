@@ -11,8 +11,11 @@ class AiAssistantRepository {
     return AssistantStatus.fromJson(_asMap(data));
   }
 
-  Future<AssistantAnswer> ask(String question) async {
-    final data = await _client.post(ApiConstants.aiAssistantAsk, data: {'question': question});
+  Future<AssistantAnswer> ask(String question, {List<Map<String, String>> history = const []}) async {
+    final data = await _client.post(ApiConstants.aiAssistantAsk, data: {
+      'question': question,
+      if (history.isNotEmpty) 'history': history,
+    });
     return AssistantAnswer.fromJson(_asMap(data));
   }
 

@@ -17,12 +17,17 @@ class AssistantStatus {
 class AssistantAnswer {
   final String answer;
   final List<dynamic> data; // raw tool results (for optional drill-down rendering)
+  final List<String> suggestions; // follow-up question chips
 
-  const AssistantAnswer({required this.answer, this.data = const []});
+  const AssistantAnswer({required this.answer, this.data = const [], this.suggestions = const []});
 
   factory AssistantAnswer.fromJson(Map<String, dynamic> json) => AssistantAnswer(
         answer: json['answer']?.toString() ?? '',
         data: (json['data'] as List<dynamic>?) ?? const [],
+        suggestions: ((json['suggestions'] as List<dynamic>?) ?? const [])
+            .map((e) => e.toString())
+            .where((s) => s.trim().isNotEmpty)
+            .toList(),
       );
 }
 
@@ -31,6 +36,14 @@ class AssistantTurn {
   final bool isUser;
   final String text;
   final bool loading;
+  final List<String> suggestions; // follow-up chips (assistant turns)
+  final List<dynamic> data; // tool results, for a mini table (assistant turns)
 
-  const AssistantTurn({required this.isUser, required this.text, this.loading = false});
+  const AssistantTurn({
+    required this.isUser,
+    required this.text,
+    this.loading = false,
+    this.suggestions = const [],
+    this.data = const [],
+  });
 }
