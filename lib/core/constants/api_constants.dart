@@ -50,6 +50,7 @@ class ApiConstants {
 
   // "Ask your business" AI assistant (owner/admin, paid add-on)
   static const String aiAssistantStatus = '/api/ai-assistant/status';
+  static const String aiAssistantBrief = '/api/ai-assistant/brief';
   static const String aiAssistantAsk = '/api/ai-assistant/ask';
   static const String aiAssistantTranscribe = '/api/ai-assistant/transcribe';
 

@@ -11,6 +11,12 @@ class AiAssistantRepository {
     return AssistantStatus.fromJson(_asMap(data));
   }
 
+  /// The proactive "morning brief" — a direct read (no LLM), shown when the assistant opens.
+  Future<BusinessBrief> brief() async {
+    final data = await _client.get(ApiConstants.aiAssistantBrief);
+    return BusinessBrief.fromJson(_asMap(data));
+  }
+
   Future<AssistantAnswer> ask(String question, {List<Map<String, String>> history = const []}) async {
     final data = await _client.post(ApiConstants.aiAssistantAsk, data: {
       'question': question,

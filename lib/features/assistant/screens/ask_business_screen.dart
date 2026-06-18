@@ -64,6 +64,9 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   bool _sending = false;
   final List<AssistantTurn> _turns = [];
 
+  BusinessBrief? _brief; // proactive digest shown on open (no LLM)
+  String _briefState = 'idle'; // idle | loading | done | error
+
   static const _suggestions = [
     "Today's sales?",
     'Who owes me the most money?',
@@ -351,8 +354,22 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     try {
       final s = await _repo.status();
       if (mounted) setState(() { _status = s; _loadingStatus = false; });
+      // Once we know the feature is live, pull the proactive brief to greet the user with it.
+      if (s.enabled && s.configured) _loadBrief();
     } catch (_) {
       if (mounted) setState(() { _status = const AssistantStatus(); _loadingStatus = false; });
+    }
+  }
+
+  // The "morning brief" — a direct read (no LLM); failures degrade silently to the suggestions.
+  Future<void> _loadBrief() async {
+    if (_briefState != 'idle') return;
+    if (mounted) setState(() => _briefState = 'loading');
+    try {
+      final b = await _repo.brief();
+      if (mounted) setState(() { _brief = b; _briefState = 'done'; });
+    } catch (_) {
+      if (mounted) setState(() => _briefState = 'error');
     }
   }
 
@@ -607,6 +624,15 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
           const SizedBox(height: 6),
           const Text('Type, or hold the 🎤 to talk',
               textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+          if (_briefState == 'loading') ...[
+            const SizedBox(height: 16),
+            const Center(child: Text('Pulling together your brief…',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontStyle: FontStyle.italic))),
+          ],
+          if (_briefState == 'done' && _brief != null && _brief!.hasContent) ...[
+            const SizedBox(height: 16),
+            _briefCard(_brief!),
+          ],
           const SizedBox(height: 18),
           Wrap(
             alignment: WrapAlignment.center,
@@ -700,6 +726,57 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
 
   // "Open <screen>" action under an answer. Tapping navigates in-app when the screen exists on
   // mobile; for web-only screens (the General Ledger pages) we show a non-tappable web-portal note.
+  // The proactive brief, rendered as titled section cards (Needs-attention highlighted).
+  Widget _briefCard(BusinessBrief b) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (b.summary.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(b.summary,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+          ),
+        ...b.sections.map((s) {
+          final attention = s.title.toLowerCase().contains('attention');
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: attention ? const Color(0xFFFFF7ED) : Colors.white,
+              border: Border.all(color: attention ? const Color(0xFFFED7AA) : const Color(0xFFE2E8F0)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${s.icon} ${s.title}'.trim(),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                const SizedBox(height: 4),
+                ...s.lines.map((ln) => Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('• $ln',
+                          style: TextStyle(fontSize: 12, height: 1.35, color: attention ? const Color(0xFF9A3412) : const Color(0xFF475569))),
+                    )),
+              ],
+            ),
+          );
+        }),
+        if (b.alertsRoute != null && b.alertCount > 0)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: FilledButton.tonal(
+                onPressed: () => context.go(b.alertsRoute!),
+                child: Text('Open Alerts (${b.alertCount})'),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _navCard(AssistantNavigate nav) {
     if (nav.openableOnMobile) {
       return Align(
