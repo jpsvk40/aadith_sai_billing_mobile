@@ -265,7 +265,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       answerText = _friendlyError(e);
     }
     // Always resolve the loading bubble; only continue the loop if still current.
-    _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const [], animate: true));
+    _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const [], navigate: ans?.navigate, animate: true));
     _scrollToEnd();
     if (_vstate == _VoiceState.off || myToken != _genToken) return; // interrupted
     if (_speakAnswers) {
@@ -376,7 +376,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     try {
       final ans = await _repo.ask(q, history: history);
       final answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
-      _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data, animate: true));
+      _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data, navigate: ans.navigate, animate: true));
       _speak(answerText);
     } catch (e) {
       _replaceLast(AssistantTurn(isUser: false, text: _friendlyError(e)));
@@ -490,6 +490,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
                       children: [
                         _bubble(t),
                         if (rows != null) _dataTable(rows),
+                        if (!t.isUser && t.navigate != null) _navCard(t.navigate!),
                         if (isLast && !t.isUser && !_sending && t.suggestions.isNotEmpty) _followups(t.suggestions),
                       ],
                     );
@@ -684,6 +685,49 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       child: Column(children: [
         Container(color: const Color(0xFFF8FAFC), child: Row(children: cols.map((c) => cell(c, header: true)).toList())),
         ...rows.map((r) => Row(children: cols.map((c) => cell(_fmtCell(c, r[c]))).toList())),
+      ]),
+    );
+  }
+
+  // "Open <screen>" action under an answer. Tapping navigates in-app when the screen exists on
+  // mobile; for web-only screens (the General Ledger pages) we show a non-tappable web-portal note.
+  Widget _navCard(AssistantNavigate nav) {
+    if (nav.openableOnMobile) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: OutlinedButton.icon(
+            onPressed: () => context.go(nav.mobileRoute!),
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: Text('Open ${nav.label}'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: Color(0xFFC7D2FE)),
+              backgroundColor: const Color(0xFFEEF2FF),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.language, size: 16, color: Color(0xFF64748B)),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text('${nav.label} is available on the web portal',
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569))),
+        ),
       ]),
     );
   }

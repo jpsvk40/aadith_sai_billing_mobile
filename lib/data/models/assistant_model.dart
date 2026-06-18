@@ -14,12 +14,33 @@ class AssistantStatus {
       );
 }
 
+/// A "take me to a screen" destination the assistant returned. `mobileRoute` is the in-app
+/// route to open (null when the screen is web-only, e.g. the General Ledger pages).
+class AssistantNavigate {
+  final String? key; // stable page id (e.g. 'invoices', 'vouchers')
+  final String label; // human label (e.g. 'Invoices')
+  final String? route; // web-portal route
+  final String? mobileRoute; // mobile-app route — null means web-only
+
+  const AssistantNavigate({this.key, required this.label, this.route, this.mobileRoute});
+
+  bool get openableOnMobile => (mobileRoute ?? '').isNotEmpty;
+
+  factory AssistantNavigate.fromJson(Map<String, dynamic> json) => AssistantNavigate(
+        key: json['key']?.toString(),
+        label: json['label']?.toString() ?? 'Open',
+        route: json['route']?.toString(),
+        mobileRoute: (json['mobileRoute']?.toString().isNotEmpty ?? false) ? json['mobileRoute'].toString() : null,
+      );
+}
+
 class AssistantAnswer {
   final String answer;
   final List<dynamic> data; // raw tool results (for optional drill-down rendering)
   final List<String> suggestions; // follow-up question chips
+  final AssistantNavigate? navigate; // "open <screen>" destination, if any
 
-  const AssistantAnswer({required this.answer, this.data = const [], this.suggestions = const []});
+  const AssistantAnswer({required this.answer, this.data = const [], this.suggestions = const [], this.navigate});
 
   factory AssistantAnswer.fromJson(Map<String, dynamic> json) => AssistantAnswer(
         answer: json['answer']?.toString() ?? '',
@@ -28,6 +49,9 @@ class AssistantAnswer {
             .map((e) => e.toString())
             .where((s) => s.trim().isNotEmpty)
             .toList(),
+        navigate: json['navigate'] is Map
+            ? AssistantNavigate.fromJson(Map<String, dynamic>.from(json['navigate'] as Map))
+            : null,
       );
 }
 
@@ -39,6 +63,7 @@ class AssistantTurn {
   final List<String> suggestions; // follow-up chips (assistant turns)
   final List<dynamic> data; // tool results, for a mini table (assistant turns)
   final bool animate; // typewriter-reveal this answer
+  final AssistantNavigate? navigate; // "open <screen>" destination, if any
 
   const AssistantTurn({
     required this.isUser,
@@ -47,5 +72,6 @@ class AssistantTurn {
     this.suggestions = const [],
     this.data = const [],
     this.animate = false,
+    this.navigate,
   });
 }
