@@ -585,14 +585,22 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     );
   }
 
-  Widget _emptyState() => ListView(
+  Widget _emptyState() {
+    final name = (ref.read(authProvider).user?.name ?? '').trim();
+    final firstName = name.isEmpty ? '' : name.split(RegExp(r'\s+')).first;
+    return ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const SizedBox(height: 8),
           const Icon(Icons.auto_awesome, size: 44, color: AppColors.primary),
           const SizedBox(height: 12),
-          const Text('Ask anything about your business',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          if (firstName.isNotEmpty) ...[
+            Text('Hi $firstName 👋',
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+          ],
+          Text(firstName.isNotEmpty ? 'How can I help today?' : 'Ask anything about your business',
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           const Text('Tamil, English or mixed — sales, collections, vendor dues, invoices…',
               textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
@@ -610,6 +618,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
           ),
         ],
       );
+  }
 
   Widget _bubble(AssistantTurn t) {
     final align = t.isUser ? Alignment.centerRight : Alignment.centerLeft;
