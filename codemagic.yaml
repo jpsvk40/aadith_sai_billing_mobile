@@ -82,7 +82,19 @@ workflows:
           # iOS config + plugin registrant and run pod install with the full plugin set.
           flutter precache --ios
           flutter pub get
-          flutter build ios --release --no-codesign
+          # Avoid the "build number already used" App Store upload error by building one past the
+          # latest build already on TestFlight. Set APP_STORE_APPLE_ID (numeric Apple app id, from
+          # App Store Connect -> App Information -> "Apple ID") in Codemagic env vars to enable this;
+          # if it's unset we fall back to the build number in pubspec.yaml (version: x.y.z+N).
+          BUILD_NUMBER_ARG=""
+          if [ -n "$APP_STORE_APPLE_ID" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+            if [ -n "$LATEST" ]; then
+              BUILD_NUMBER_ARG="--build-number=$((LATEST + 1))"
+              echo "Latest TestFlight build = $LATEST -> building with $BUILD_NUMBER_ARG"
+            fi
+          fi
+          flutter build ios --release --no-codesign $BUILD_NUMBER_ARG
           echo "===== Podfile.lock PODS after flutter build ====="
           sed -n '/^PODS:/,/^DEPENDENCIES:/p' ios/Podfile.lock || true
       - name: Build IPA
