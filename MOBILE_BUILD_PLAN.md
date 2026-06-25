@@ -104,3 +104,116 @@ Also (infra, not strictly R2): add `connect_timeout=30` / keep-warm so the app's
 - **Never send blob columns to a list endpoint** (caused OOM). Mobile lists must be lean + paginated.
 - **Migrations apply on Render deploy**, but cold-start `P1001` can block the deploy — warm Neon / retry / add connect_timeout.
 - AI extracts **amounts** reliably but **identifiers (invoice no., GSTIN, year)** can be OCR-noisy → keep the date-year + mismatch guards.
+
+---
+
+# SERVICE MODULE — Mobile (added 2026-06-24)
+
+> The Flutter app has **zero** Service today (no ticket / warranty / contract / technician code; `technician`
+> isn't even in `app_constants.dart`). The **backend Service API is rich and mobile-ready** — this is almost
+> entirely a front-end build, plus one small backend enabler (attachments/R2).
+
+## Locked decisions
+1. **One app, two personas** (NOT two repos). Extend this Flutter app with a **Technician** persona + an
+   **Admin/Owner Service** persona, selected by `normalizedRole` / `effectiveModules`, gated by the
+   `warranty_service` module. (A separate technician **flavor** can come later; not now.)
+2. **Technician persona first** — highest field value.
+3. **E2E runs on the already-running Android emulator** (Pixel 7 · Android 15 · API 35 · x86_64) via
+   `integration_test` against the **local TEST backend** (see E2E section).
+
+## Backend Service API already available (thin client)
+- Tickets: `GET /service-tickets`(+`?assignedTo=`/`?status=`), `/:id`, `POST /`, `…/assign`, `…/status`,
+  `…/parts`(+`/:partId` delete), `…/payment`, `…/estimate`(+`/approve`,`/reject`), `…/job-sheet`, `…/invoice`.
+- Items/warranty: `GET /service-items`, `/lookup`, `/:id`, `POST /`, `PATCH /:id`, `POST /from-invoice/:invoiceId`.
+- AMC: `GET /service-contracts`, `/due-visits`, `/:id`, `POST /`, `…/visits`(+`/:visitId` done), `…/renew`.
+- Reports: `/service-reports/dashboard`(`?technicianId=`), `/warranty-register`, `/expiring`,
+  `/open-tickets-aging`, `/technician-productivity`, `/service-revenue`, `/parts-usage`.
+
+## PHASE S0 — Backend enablers (only must-do backend work)
+1. **`ServiceTicketAttachment` + R2** (reuses PHASE 0 R2 work): `POST /service-tickets/:id/attachments`
+   (multipart `file` → R2 key + kind: INTAKE/REPAIR/HANDOVER), `GET …/attachments` (presigned URLs).
+   Needed for before/after photos + signed handover.
+2. **Technician-scoped list:** confirm/add `GET /service-tickets?assignedTo=me&status=…`
+   (dashboard already takes `?technicianId`). Likely one filter line.
+3. **Seed for E2E:** extend `backend/scripts/seed-service-e2e.js` to create a **technician** user
+   (`service-e2e-tech@example.com` / `Test@1234`) and **assign ≥1 ticket** to them, so "My Tickets" is
+   non-empty and the persona split is testable.
+
+## PHASE S1 — Technician persona (Flutter)
+**Plumbing**
+- `pubspec.yaml`: `integration_test` (dev), `image_picker`, `signature`, `mobile_scanner`. iOS Info.plist
+  `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription`; Android camera perm.
+- `core/constants/app_constants.dart`: add `roleTechnician = 'technician'`.
+- `core/constants/api_constants.dart`: service endpoints (mirror the API list above).
+- `data/network/api_client.dart`: ensure `uploadFile(path, filePath, {fields})` (Dio `FormData` + `MultipartFile`).
+- `widgets/navigation/bottom_nav_bar.dart` + `route_guards.dart`: **Technician tab-set** when role=technician
+  & module `warranty_service`: **My Tickets · Today (AMC) · Alerts · Profile**; `postLoginHome` → My Tickets.
+- New `data/models/{service_ticket,service_ticket_part,service_item,service_contract}_model.dart`,
+  `data/repositories/service_repository.dart`, `features/service/providers/*`, `features/service/screens/*`,
+  register routes inside the `ShellRoute` + `requiredModuleForLocation('warranty_service')`.
+
+**Screens → endpoints**
+| Screen | Does | Endpoint(s) |
+|---|---|---|
+| My Tickets (home tab) | assigned-to-me, status filter, pull-to-refresh | `GET /service-tickets?assignedTo=me` |
+| Ticket detail | timeline, **status** change, add/remove **parts**, **payment/advance**, **job-sheet** | `…/status`, `…/parts`, `…/payment`, `…/job-sheet` |
+| Intake/handover | **photos** (before/after), **signature** on delivery, checklist | `…/attachments` (S0) |
+| Warranty lookup | **serial/IMEI scan** → item + warranty | `GET /service-items/lookup` |
+| Today's visits | AMC PM due to me, mark-done, call/navigate | `GET /service-contracts/due-visits`, `…/visits/:id` |
+
+## PHASE S2 — Admin/Owner Service persona (pure front-end; all endpoints exist)
+Service Dashboard (KPIs) · all tickets (create, **assign**, estimate→approve, **invoice**) · Warranty/Items ·
+AMC contracts (+ due-visits) · reports (productivity/revenue/parts). Add an **Admin Service** tab/section.
+
+## PHASE S3 — Polish
+FCM **push** (ticket assigned, AMC due) · **offline queue** for status/parts · maps/navigation + per-ticket
+**time tracking** (feeds technician-productivity).
+
+## E2E TESTING — on the running emulator (Pixel 7 · API 35)
+**Harness:** Flutter `integration_test` (add to dev_dependencies) + `flutter_test`. Tests live in
+`integration_test/` (e.g. `technician_flow_test.dart`, `admin_service_flow_test.dart`). Each drives the **real
+app** widget tree end to end (login → screens → API calls → assertions on visible widgets).
+
+**Backend target (key detail):** the Android emulator reaches the host machine at **`10.0.2.2`**, so point the
+app at the **local TEST backend**: run the backend (`node --experimental-require-module backend/src/server.js`,
+TEST Neon in `backend/.env`), seed it (PHASE S0 #3), and launch the app with
+`--dart-define=API_BASE=http://10.0.2.2:3001` (or a `.env.test`). E2E asserts against this seeded data — the
+same TEST DB the web service E2E uses. *(Optional: a Dio-interceptor "mock mode" returning fixtures for pure-UI
+runs with no network — add only if network flakiness bites.)*
+
+**Pre-reqs / commands**
+```
+# emulator already running; verify (adb is in <AndroidSdk>/platform-tools)
+adb devices                       # expect: emulator-5554  device
+# backend up + seeded with a technician + an assigned ticket (PHASE S0 #3)
+flutter pub get
+flutter test integration_test/ -d emulator-5554 \
+  --dart-define=API_BASE=http://10.0.2.2:3001
+# (or, if a driver is needed:)
+# flutter drive --driver=test_driver/integration_test.dart \
+#   --target=integration_test/technician_flow_test.dart -d emulator-5554
+```
+
+**Scenarios to cover**
+- *Technician:* login (`service-e2e-tech@example.com`) → My Tickets non-empty → open ticket → change
+  **status** (asserts new status chip) → add a **part** (asserts total updates) → record **payment**
+  (asserts balance) → mark **DELIVERED** with a **signature** + a **photo** (image_picker returns a bundled
+  test asset on the emulator) → ticket leaves the open list.
+- *Admin (PHASE S2):* login (`service-e2e-admin@example.com`) → **dashboard KPIs** render → **create** a
+  ticket → **assign** to the technician → **estimate → approve** → **invoice** (asserts invoice no.) →
+  AMC **due-visits** mark-done.
+- *Guards:* a technician login must **not** see admin tabs (assert tab set); module-off company hides Service.
+
+**CI:** add an emulator E2E job to `codemagic.yaml` (Codemagic can boot an AVD) running the same
+`flutter test integration_test/` against a seeded staging backend. Keep it a **separate, non-blocking** job
+first (HTTP-against-live can be flaky), promote to required once stable. Mirror the web gate discipline:
+unit/widget tests must stay green before the integration job.
+
+## Effort (Service mobile, rough)
+| Phase | Work | Size |
+|---|---|---|
+| S0 | ServiceTicketAttachment + R2, `assignedTo=me`, seed technician | S–M |
+| S1 | Technician persona (models/repo/providers + 5 screens + nav + scan/photo/signature) | L |
+| S2 | Admin Service persona (dashboard + tickets/assign/estimate/invoice + AMC + reports) | L |
+| S3 | FCM push + offline queue + maps/time-tracking | M–L |
+| E2E | integration_test harness + technician & admin flows + CI job | M |
