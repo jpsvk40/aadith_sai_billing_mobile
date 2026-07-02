@@ -82,6 +82,47 @@ class ApiConstants {
   // Projects (lite list — for Site-Logistics pickers)
   static const String projects = '/api/projects';
 
+  // ─── Service & Warranty (warranty_service module) ───
+  // Tickets
+  static const String serviceTickets = '/api/service-tickets';
+  static String serviceTicket(String id) => '/api/service-tickets/$id';
+  static String serviceTicketStatus(String id) => '/api/service-tickets/$id/status';
+  static String serviceTicketAssign(String id) => '/api/service-tickets/$id/assign';
+  static String serviceTicketParts(String id) => '/api/service-tickets/$id/parts';
+  static String serviceTicketPart(String id, String partId) => '/api/service-tickets/$id/parts/$partId';
+  static String serviceTicketPayment(String id) => '/api/service-tickets/$id/payment';
+  static String serviceTicketEstimate(String id) => '/api/service-tickets/$id/estimate';
+  static String serviceTicketEstimateApprove(String id) => '/api/service-tickets/$id/estimate/approve';
+  static String serviceTicketEstimateReject(String id) => '/api/service-tickets/$id/estimate/reject';
+  static String serviceTicketJobSheet(String id) => '/api/service-tickets/$id/job-sheet';
+  static String serviceTicketInvoice(String id) => '/api/service-tickets/$id/invoice';
+  static String serviceTicketAttachments(String id) => '/api/service-tickets/$id/attachments';
+  // Items / warranty
+  static const String serviceItems = '/api/service-items';
+  static const String serviceItemLookup = '/api/service-items/lookup';
+  static const String servicePartsCatalog = '/api/service-items/parts-catalog';
+  static const String serviceTechnicians = '/api/service-tickets/technicians';
+  static const String serviceAiTriage = '/api/service-tickets/ai-triage';
+  static String serviceItem(String id) => '/api/service-items/$id';
+  // AMC contracts
+  static const String serviceContracts = '/api/service-contracts';
+  static const String serviceDueVisits = '/api/service-contracts/due-visits';
+  static String serviceContract(String id) => '/api/service-contracts/$id';
+  static String serviceContractVisits(String id) => '/api/service-contracts/$id/visits';
+  static String serviceContractVisit(String id, String visitId) => '/api/service-contracts/$id/visits/$visitId';
+  static String serviceContractRenew(String id) => '/api/service-contracts/$id/renew';
+  // Calendar (cross-module feed: AMC visits/renewals, invoice due, etc.)
+  static const String calendar = '/api/calendar';
+  static const String calendarReschedule = '/api/calendar/reschedule';
+  // Reports
+  static const String serviceDashboard = '/api/service-reports/dashboard';
+  static const String serviceWarrantyRegister = '/api/service-reports/warranty-register';
+  static const String serviceExpiring = '/api/service-reports/expiring';
+  static const String serviceOpenAging = '/api/service-reports/open-tickets-aging';
+  static const String serviceTechProductivity = '/api/service-reports/technician-productivity';
+  static const String serviceRevenue = '/api/service-reports/service-revenue';
+  static const String servicePartsUsage = '/api/service-reports/parts-usage';
+
   // Site Logistics
   static const String siteSurveys = '/api/project-sites/surveys';
   static String siteSurveySubmit(String id) => '/api/project-sites/surveys/$id/submit';

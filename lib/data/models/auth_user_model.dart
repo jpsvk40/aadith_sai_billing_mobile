@@ -7,6 +7,7 @@ class AuthUser {
   final String? companyId;
   final String? companyName;
   final bool? appAccess;
+  final bool aiAssistantAccess; // admin-controlled per-user grant for "Ask your business"
   final List<String> effectiveModules;
 
   const AuthUser({
@@ -18,6 +19,7 @@ class AuthUser {
     this.companyId,
     this.companyName,
     this.appAccess,
+    this.aiAssistantAccess = true,
     this.effectiveModules = const [],
   });
 
@@ -31,6 +33,7 @@ class AuthUser {
       companyId: json['companyId']?.toString(),
       companyName: json['company']?['name'] ?? json['companyName'],
       appAccess: json['appAccess'] as bool?,
+      aiAssistantAccess: json['aiAssistantAccess'] != false, // default ON unless explicitly false
       effectiveModules: (json['effectiveModules'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList() ?? [],
@@ -46,6 +49,7 @@ class AuthUser {
     'companyId': companyId,
     'companyName': companyName,
     'appAccess': appAccess,
+    'aiAssistantAccess': aiAssistantAccess,
     'effectiveModules': effectiveModules,
   };
 
@@ -55,5 +59,9 @@ class AuthUser {
   bool get isCollectionRep => effectiveRole == 'collection_rep';
   bool get isAccounts => effectiveRole == 'accounts';
   bool get isDispatch => effectiveRole == 'dispatch';
+  bool get isTechnician => effectiveRole == 'technician';
   bool hasModule(String module) => effectiveModules.contains(module);
+  // Billing-capable roles (mirrors backend canBill: admin/manager/accounts/super_*).
+  bool get canBill => isAdmin || isAccounts;
+  bool get hasService => hasModule('warranty_service');
 }

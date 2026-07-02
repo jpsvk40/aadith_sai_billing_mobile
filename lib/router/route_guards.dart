@@ -17,6 +17,7 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/invoices')) return 'invoices';
   if (location.startsWith('/payments')) return 'payments';
   if (location.startsWith('/collections')) return 'collections';
+  if (location.startsWith('/service')) return 'warranty_service'; // Service & Warranty
   if (location.startsWith('/site-logistics')) return 'projects'; // ERP-only (Project & Contract)
   if (location.startsWith('/commissions')) return 'reports';
   if (location.startsWith('/alerts')) return 'alerts';
@@ -36,7 +37,10 @@ bool canAccessLocation(AuthUser? user, String location) {
 }
 
 String postLoginHome(AuthUser? user) {
-  // Home is the landing screen for everyone (role-aware overview).
+  // Technicians live in their ticket queue; everyone else lands on the role-aware Home.
+  if (user?.isTechnician == true && user?.hasModule('warranty_service') == true) {
+    return '/service/tickets';
+  }
   return '/dashboard';
 }
 

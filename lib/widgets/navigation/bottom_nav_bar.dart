@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import 'floating_assistant_button.dart';
 
 class AppBottomNavBar extends ConsumerWidget {
   final Widget child;
@@ -15,8 +16,20 @@ class AppBottomNavBar extends ConsumerWidget {
   static const _commission = _NavTab(label: 'Commission', icon: Icons.percent_outlined, activeIcon: Icons.percent, route: '/commissions');
   static const _alerts = _NavTab(label: 'Alerts', icon: Icons.notifications_outlined, activeIcon: Icons.notifications, route: '/alerts');
   static const _profile = _NavTab(label: 'Profile', icon: Icons.person_outline, activeIcon: Icons.person, route: '/profile');
+  // Service & Warranty persona tabs.
+  static const _myTickets = _NavTab(label: 'My Tickets', icon: Icons.build_circle_outlined, activeIcon: Icons.build_circle, route: '/service/tickets');
+  static const _today = _NavTab(label: 'Today', icon: Icons.event_outlined, activeIcon: Icons.event, route: '/service/today');
+  static const _service = _NavTab(label: 'Service', icon: Icons.handyman_outlined, activeIcon: Icons.handyman, route: '/service/dashboard');
 
   List<_NavTab> _getTabsForUser(dynamic user) {
+    // Technician persona: their queue + AMC visits, no financial tabs.
+    if (user?.isTechnician == true && user?.hasModule('warranty_service') == true) {
+      final t = <_NavTab>[_myTickets, _today];
+      if (user?.hasModule('alerts') == true) t.add(_alerts);
+      t.add(_profile);
+      return t;
+    }
+
     final tabs = <_NavTab>[_home];
     final isRep = user?.isSalesRep == true || user?.isCollectionRep == true;
     if (isRep) {
@@ -28,6 +41,7 @@ class AppBottomNavBar extends ConsumerWidget {
       // Owner / admin / manager.
       if (user?.hasModule('orders') == true) tabs.add(_orders);
       if (user?.hasModule('payments') == true) tabs.add(_payments);
+      if (user?.hasModule('warranty_service') == true) tabs.add(_service);
       if (user?.hasModule('alerts') == true) tabs.add(_alerts);
     }
     tabs.add(_profile);
@@ -49,7 +63,13 @@ class AppBottomNavBar extends ConsumerWidget {
     final currentIndex = _currentIndex(location, tabs);
 
     return Scaffold(
-      body: child,
+      body: Stack(
+        children: [
+          child,
+          // Always-on, draggable AI assistant launcher over every tab.
+          const FloatingAssistantButton(),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.surface,

@@ -113,6 +113,47 @@ Also (infra, not strictly R2): add `connect_timeout=30` / keep-warm so the app's
 > isn't even in `app_constants.dart`). The **backend Service API is rich and mobile-ready** — this is almost
 > entirely a front-end build, plus one small backend enabler (attachments/R2).
 
+## ✅ STATUS — BUILT 2026-06-25 (S0–S3 + E2E; NOT pushed)
+- **S0 backend enablers (DONE, live-verified on TEST DB / company 10):**
+  - `ServiceTicketAttachment` model + runtime-DDL (`helpers/serviceAttachmentSchema.js`, ensured in `server.js`);
+    `POST /service-tickets/:id/attachments` (multer→R2, kind INTAKE/REPAIR/HANDOVER/OTHER) + `GET …/attachments`
+    (presigned URLs). R2 upload round-trip verified (201 + presigned GET).
+  - `GET /service-tickets?assignedTo=me` → resolves the logged-in User→Employee (`Employee.userId`) → their
+    `assignedTechnicianId` queue. Verified: technician sees exactly their assigned ticket.
+  - Two small picker enablers under the `warranty_service` module (so a technician/admin without
+    inventory/payroll modules can still pick): `GET /service-items/parts-catalog?search=` (spare parts) and
+    `GET /service-tickets/technicians` (assignable employees).
+  - Seed (`scripts/seed-service-e2e.js`): now creates a **technician User** (`service-e2e-tech@example.com` /
+    `Test@1234`, role `technician`), links it to the `EMP-SVCTECH` Employee via `userId`, and **assigns the
+    seeded ticket** to them (OPEN→ASSIGNED). `SEED_RESULT_JSON` gained `techLogin`.
+- **S1 technician persona (DONE, lint-clean):** models (`service_ticket/_item/_contract_model.dart`),
+  `service_repository.dart`, `features/service/providers/service_providers.dart`, `service_status.dart` (FSM
+  mirror), screens: My Tickets (assignedTo=me + status chips), Ticket detail (timeline, status FSM, parts
+  add/remove via catalog picker, before/after **photos** via image_picker→R2, **signature** handover on
+  DELIVERED via `signature`→R2, diagnosis edit), Warranty lookup (serial + `mobile_scanner` barcode),
+  Today's AMC visits (mark-done, call, navigate). Nav: technician tab-set (My Tickets · Today · Profile) +
+  `postLoginHome`→`/service/tickets`; `route_guards` maps `/service`→`warranty_service`.
+- **S2 admin persona (DONE, full lifecycle API-verified):** Service dashboard (KPIs + quick links), create
+  ticket (customer picker), assign technician, raise/approve estimate, record payment, raise GST invoice
+  (verified create→assign→estimate→approve→READY→invoice `SVCE2E-00213`), warranty register, AMC contracts,
+  reports (revenue/productivity/parts). Admin **Service** bottom-tab when `warranty_service` is on.
+- **S3 polish (PARTIAL):** maps/navigation + **call** on ticket detail (on-site) **DONE**. Remaining
+  (infra/decision-gated, NOT built): **FCM push** (needs a Firebase project + google-services.json/APNs key),
+  **offline mutation queue** (replay/conflict semantics), **persisted time-tracking** (needs a backend field).
+- **E2E (DONE, compiles clean — run on the user's emulator):** `integration_test/` with
+  `service_e2e_helpers.dart`, `technician_flow_test.dart`, `admin_service_flow_test.dart`. Photo/signature
+  steps are excluded from the automated asserts (image_picker/camera channel mocking is flaky); they're
+  manual-verify. `integration_test` added to dev_dependencies; `signature` + `mobile_scanner` added to deps.
+- **Gates:** `flutter analyze` (lib + integration_test) = **No issues**; backend **jest 105/105**.
+- **Run the E2E** (note the dart-define key is **`API_BASE_URL`**, the key the app actually reads):
+  ```
+  # 1) backend on TEST DB + seeded technician/ticket
+  node --experimental-require-module backend/scripts/seed-service-e2e.js   # (backend running on :3001)
+  # 2) emulator E2E
+  flutter test integration_test/ -d emulator-5554 --dart-define=API_BASE_URL=http://10.0.2.2:3001
+  ```
+  Re-seed before each run (the technician flow mutates the seeded ticket's status).
+
 ## Locked decisions
 1. **One app, two personas** (NOT two repos). Extend this Flutter app with a **Technician** persona + an
    **Admin/Owner Service** persona, selected by `normalizedRole` / `effectiveModules`, gated by the

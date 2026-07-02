@@ -24,6 +24,16 @@ import '../features/purchases/screens/purchase_list_screen.dart';
 import '../features/purchases/screens/purchase_create_screen.dart';
 import '../features/customers/screens/customer_list_screen.dart';
 import '../features/assistant/screens/ask_business_screen.dart';
+import '../features/service/screens/my_tickets_screen.dart';
+import '../features/service/screens/ticket_detail_screen.dart';
+import '../features/service/screens/warranty_lookup_screen.dart';
+import '../features/service/screens/today_visits_screen.dart';
+import '../features/service/screens/service_dashboard_screen.dart';
+import '../features/service/screens/create_ticket_screen.dart';
+import '../features/service/screens/service_items_screen.dart';
+import '../features/service/screens/service_contracts_screen.dart';
+import '../features/service/screens/service_reports_screen.dart';
+import '../features/service/screens/service_calendar_screen.dart';
 import '../data/models/order_model.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/shared/screens/unauthorized_screen.dart';
@@ -139,6 +149,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
             GoRoute(path: '/alerts', builder: (c, s) => const AlertsScreen()),
             GoRoute(path: '/ask-business', builder: (c, s) => const AskBusinessScreen()),
+            // ─── Service & Warranty ───
+            GoRoute(path: '/service/dashboard', builder: (c, s) => const ServiceDashboardScreen()),
+            GoRoute(path: '/service/tickets', builder: (c, s) => const TechnicianTicketsScreen()),
+            GoRoute(path: '/service/tickets/create', builder: (c, s) => const CreateTicketScreen()),
+            GoRoute(path: '/service/warranty-lookup', builder: (c, s) => const WarrantyLookupScreen()),
+            GoRoute(path: '/service/today', builder: (c, s) => const TodayVisitsScreen()),
+            GoRoute(path: '/service/calendar', builder: (c, s) => const ServiceCalendarScreen()),
+            GoRoute(path: '/service/items', builder: (c, s) => const ServiceItemsScreen()),
+            GoRoute(path: '/service/contracts', builder: (c, s) => const ServiceContractsScreen()),
+            GoRoute(path: '/service/reports', builder: (c, s) => const ServiceReportsScreen()),
+            GoRoute(
+              path: '/service/tickets/:id',
+              builder: (c, s) => TicketDetailScreen(ticketId: int.parse(s.pathParameters['id']!)),
+            ),
             GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
           ],
         ),

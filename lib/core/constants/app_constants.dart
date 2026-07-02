@@ -16,6 +16,7 @@ class AppConstants {
   static const String roleDispatch = 'dispatch';
   static const String rolePacking = 'packing';
   static const String roleProduction = 'production';
+  static const String roleTechnician = 'technician'; // Service & Warranty field persona
 
   static const List<String> adminRoles = [
     roleSuperAdmin,

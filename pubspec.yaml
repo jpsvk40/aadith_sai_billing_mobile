@@ -26,9 +26,14 @@ dependencies:
   record: ^7.1.0          # mic capture for "Ask your business" voice
   path_provider: ^2.1.0   # temp dir for the recorded clip
   flutter_tts: ^4.0.0     # speak the assistant's answers (on-device TTS)
+  signature: ^5.5.0       # Service: customer signature capture on delivery/handover
+  mobile_scanner: ^5.2.3  # Service: scan serial/IMEI barcode for warranty lookup
+  table_calendar: ^3.1.2  # Service: AMC visits + deadlines calendar
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:       # Service E2E on the emulator (technician + admin flows)
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4

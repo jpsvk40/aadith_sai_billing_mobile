@@ -14,9 +14,10 @@ class AppColors {
   static const Color info = Color(0xFF0DCAF0);
   static const Color infoLight = Color(0xFFCFF4FC);
 
-  static const Color textPrimary = Color(0xFF212529);
-  static const Color textSecondary = Color(0xFF6C757D);
-  static const Color textMuted = Color(0xFFADB5BD);
+  // Text ramp — darkened for stronger contrast/readability on light surfaces.
+  static const Color textPrimary = Color(0xFF1A1D21); // near-black headings/values
+  static const Color textSecondary = Color(0xFF495057); // labels/secondary (was #6C757D — too light)
+  static const Color textMuted = Color(0xFF6C757D); // muted captions (was #ADB5BD — too light)
 
   static const Color background = Color(0xFFF8F9FA);
   static const Color surface = Color(0xFFFFFFFF);

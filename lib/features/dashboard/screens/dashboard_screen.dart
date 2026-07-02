@@ -14,6 +14,7 @@ import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../data/models/mobile_home_model.dart';
 import '../../purchases/screens/purchase_create_screen.dart';
+import '../../service/providers/service_providers.dart';
 import '../providers/home_provider.dart';
 
 // SkillTrackr-style palette
@@ -112,6 +113,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(homeProvider);
     final user = ref.watch(authProvider).user;
+    final isService = user?.hasModule('warranty_service') == true;
+    // Open-ticket count for the hero (only when this is a service company).
+    final openTickets = isService
+        ? (ref.watch(serviceDashboardProvider).valueOrNull?['kpis']?['openTotal'] as int?)
+        : null;
     final o = state.overview ?? const HomeOverview();
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -124,8 +130,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: ListView(
                     padding: EdgeInsets.zero,
                     children: [
-                      o.isRep ? _repHero(context, o, user) : _hero(context, o, user),
-                      _sheet(o.isRep ? _repBody(context, o, user) : _ownerBody(o)),
+                      o.isRep ? _repHero(context, o, user) : _hero(context, o, user, openTickets),
+                      _sheet(o.isRep ? _repBody(context, o, user) : _ownerBody(o, user)),
                     ],
                   ),
                 ),
@@ -141,21 +147,208 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       );
 
-  Widget _ownerBody(HomeOverview o) => Column(
-        children: [
-          _scanBanner(),
-          const SizedBox(height: 20),
-          _quickAccess(),
-          const SizedBox(height: 20),
-          _plCard(o),
-          const SizedBox(height: 20),
+  Widget _ownerBody(HomeOverview o, dynamic user) {
+    // Service companies get a dedicated, service-only Home (no billing P&L / payroll / cash-flow noise).
+    if (user?.hasModule('warranty_service') == true) return _serviceOwnerBody();
+
+    final hasOrders = user?.hasModule('orders') == true;
+    return Column(
+      children: [
+        _scanBanner(),
+        const SizedBox(height: 20),
+        _quickAccess(),
+        const SizedBox(height: 20),
+        _plCard(o),
+        const SizedBox(height: 20),
+        // Orders-by-status only makes sense for companies that run the orders module.
+        if (hasOrders) ...[
           _ordersByStatus(o),
           const SizedBox(height: 20),
-          _outstandingAndCash(o),
-          const SizedBox(height: 20),
-          _recentActivity(o),
-          const SizedBox(height: 16),
         ],
+        _outstandingAndCash(o),
+        const SizedBox(height: 20),
+        _recentActivity(o),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ════════════ Service-only owner Home ════════════
+  Widget _serviceOwnerBody() {
+    return Column(
+      children: [
+        _serviceSnapshot(),
+        const SizedBox(height: 20),
+        _quickAccess(),
+        const SizedBox(height: 20),
+        _serviceDataSection(),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _serviceDataSection() {
+    final async = ref.watch(serviceDashboardProvider);
+    return async.when(
+      loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (d) {
+        final rev = (d['revenueThisMonth'] as Map<String, dynamic>?) ?? const {};
+        final k = (d['kpis'] as Map<String, dynamic>?) ?? const {};
+        final exp = (k['warrantiesExpiring'] as Map<String, dynamic>?) ?? const {};
+        final recent = (d['recentTickets'] as List<dynamic>?) ?? const [];
+        final expTotal = ((exp['d30'] ?? 0) as num) + ((exp['d60'] ?? 0) as num) + ((exp['d90'] ?? 0) as num);
+        return Column(
+          children: [
+            // Service revenue this month (labour + parts), what's collected, what's owed.
+            _card(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _sectionHeader('Service Revenue · This Month', 'Reports', () => context.go('/service/reports')),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _miniStat('Billed', CurrencyUtils.format(rev['billed'] ?? 0), AppColors.primary)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _miniStat('Collected', CurrencyUtils.format(rev['collected'] ?? 0), AppColors.success)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _miniStat('Receivable', CurrencyUtils.format(k['outstandingReceivables'] ?? 0), _orange)),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _svcInline('Labour', CurrencyUtils.format(rev['labour'] ?? 0))),
+                  Expanded(child: _svcInline('Parts', CurrencyUtils.format(rev['parts'] ?? 0))),
+                ]),
+              ]),
+            )),
+            const SizedBox(height: 16),
+            // Operations at a glance.
+            _card(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Operations', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: _opStat('${k['intakeToday'] ?? 0}', 'Intake today', AppColors.primary)),
+                  Expanded(child: _opStat('${k['deliveredToday'] ?? 0}', 'Delivered today', AppColors.success)),
+                  Expanded(child: _opStat('${(k['avgTurnaroundDays'] ?? 0)}', 'Avg TAT (days)', _purple)),
+                ]),
+              ]),
+            )),
+            if (expTotal > 0) ...[
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => context.go('/service/items'),
+                child: _card(child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    const Icon(Icons.verified_user_outlined, color: _orange),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text('$expTotal warranties expiring soon', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+                    Text('30d ${exp['d30'] ?? 0} · 60d ${exp['d60'] ?? 0} · 90d ${exp['d90'] ?? 0}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                    const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+                  ]),
+                )),
+              ),
+            ],
+            const SizedBox(height: 16),
+            _recentTickets(recent),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _recentTickets(List<dynamic> recent) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Recent Tickets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        const SizedBox(height: 12),
+        if (recent.isEmpty)
+          _card(child: const Padding(padding: EdgeInsets.all(16), child: Text('No recent tickets.', style: TextStyle(color: AppColors.textSecondary))))
+        else
+          _card(child: Column(
+            children: List.generate(recent.length.clamp(0, 6), (i) {
+              final r = recent[i] as Map<String, dynamic>;
+              final last = i == recent.length.clamp(0, 6) - 1;
+              final cust = (r['customer'] as Map<String, dynamic>?)?['customerName']?.toString() ?? '—';
+              final status = (r['status'] ?? 'OPEN').toString();
+              return InkWell(
+                onTap: () => context.go('/service/tickets/${r['id']}'),
+                child: Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: last ? Colors.transparent : AppColors.divider, width: 0.6))),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
+                      child: const Icon(Icons.build_outlined, color: AppColors.primary, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('${r['ticketNumber'] ?? ''}  ·  $cust', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
+                      Text(status, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    ])),
+                    if (r['totalCharge'] != null)
+                      Text(CurrencyUtils.formatCompact(r['totalCharge']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+                  ]),
+                ),
+              );
+            }),
+          )),
+      ],
+    );
+  }
+
+  Widget _svcInline(String label, String value) => Row(children: [
+        Text('$label: ', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+      ]);
+
+  Widget _opStat(String value, String label, Color color) => Column(children: [
+        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+        const SizedBox(height: 2),
+        Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+      ]);
+
+  // ---------------- Service snapshot (owner of a service company) ----------------
+  Widget _serviceSnapshot() {
+    final async = ref.watch(serviceDashboardProvider);
+    return _card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('Service Overview', 'Open', () => context.go('/service/dashboard')),
+            const SizedBox(height: 14),
+            async.when(
+              loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)))),
+              error: (e, _) => const Text('Could not load service stats', style: TextStyle(color: AppColors.textSecondary)),
+              data: (d) {
+                final k = (d['kpis'] as Map<String, dynamic>?) ?? const {};
+                return Row(children: [
+                  _svcStat('Open', '${k['openTotal'] ?? 0}', AppColors.primary),
+                  _svcStat('Unassigned', '${k['unassigned'] ?? 0}', _orange),
+                  _svcStat('Ready', '${k['readyForDelivery'] ?? 0}', AppColors.success),
+                  _svcStat('SLA', '${k['slaBreached'] ?? 0}', AppColors.danger),
+                ]);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _svcStat(String label, String value, Color color) => Expanded(
+        child: Column(children: [
+          Text(value, style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        ]),
       );
 
   // ---------------- Rep Home ----------------
@@ -369,8 +562,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // ---------------- Hero ----------------
-  Widget _hero(BuildContext context, HomeOverview o, dynamic user) {
+  Widget _hero(BuildContext context, HomeOverview o, dynamic user, int? openTickets) {
     final companyName = o.companyName ?? user?.companyName ?? 'Your Business';
+    final isService = openTickets != null;
     return ClipRRect(
       borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(28), bottomRight: Radius.circular(28)),
       child: Container(
@@ -445,7 +639,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       const SizedBox(width: 8),
                       _heroStat(CurrencyUtils.formatCompact(o.collectedThisMonth), 'Collected', _statGreen),
                       const SizedBox(width: 8),
-                      _heroStat('${o.ordersThisMonth}', 'Orders', _statPurple),
+                      // Service companies have no orders — surface open tickets instead.
+                      isService
+                          ? _heroStat('$openTickets', 'Open Jobs', _statPurple)
+                          : _heroStat('${o.ordersThisMonth}', 'Orders', _statPurple),
                       const SizedBox(width: 8),
                       _heroStat(CurrencyUtils.formatCompact(o.receivablesOutstanding), 'Outstanding', _statGold),
                     ],
@@ -611,17 +808,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   // ---------------- Quick Access ----------------
   Widget _quickAccess() {
     final user = ref.read(authProvider).user;
-    final actions = [
-      (Icons.add_shopping_cart, 'New Purchase', AppColors.primary, () => context.go('/purchases')),
+    bool has(String m) => user?.hasModule(m) == true;
+    final isService = has('warranty_service');
+    // Build module-relevant tiles. Service companies lead with service actions and drop
+    // sales/procurement tiles that don't apply.
+    final actions = <(IconData, String, Color, VoidCallback)>[
+      if (isService) ...[
+        (Icons.handyman_outlined, 'Service', _purple, () => context.go('/service/dashboard')),
+        (Icons.add_circle_outline, 'New Ticket', AppColors.primary, () => context.go('/service/tickets/create')),
+        (Icons.calendar_month_outlined, 'Calendar', const Color(0xFF0EA5E9), () => context.go('/service/calendar')),
+        (Icons.qr_code_scanner, 'Warranty', const Color(0xFF0891B2), () => context.go('/service/warranty-lookup')),
+        (Icons.event_available_outlined, 'AMC Today', _orange, () => context.go('/service/today')),
+      ],
+      if (!isService)
+        (Icons.add_shopping_cart, 'New Purchase', AppColors.primary, () => context.go('/purchases')),
+      if (has('orders'))
+        (Icons.receipt_long, 'Orders', _purple, () => context.go('/orders')),
       // Site Logistics belongs to the Project & Contract (ERP) module — hide it for billing-only companies.
-      if (user?.hasModule('projects') == true)
+      if (has('projects'))
         (Icons.location_on_outlined, 'Site Logistics', const Color(0xFF0EA5E9), () => context.go('/site-logistics')),
-      (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/payments?filter=Pending')),
-      (Icons.receipt_long, 'Orders', _purple, () => context.go('/orders')),
-      (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),
-      (Icons.account_balance_wallet_outlined, 'Collections', const Color(0xFF0891B2), () => context.go('/collections')),
-      (Icons.auto_awesome, 'Ask AI', const Color(0xFF7C3AED), () => context.go('/ask-business')),
-      (Icons.insights_outlined, 'Reports', AppColors.danger, () => _soon('Reports')),
+      if (has('payments'))
+        (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/payments?filter=Pending')),
+      if (has('invoices'))
+        (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),
+      if (has('collections'))
+        (Icons.account_balance_wallet_outlined, 'Collections', const Color(0xFF0891B2), () => context.go('/collections')),
+      // "Ask AI" lives in the always-on floating launcher now (see FloatingAssistantButton).
+      if (has('reports'))
+        (Icons.insights_outlined, 'Reports', AppColors.danger, () => isService ? context.go('/service/reports') : _soon('Reports')),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

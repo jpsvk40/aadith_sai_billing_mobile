@@ -41,6 +41,8 @@ workflows:
     integrations:
       app_store_connect: aadith-appstore
     environment:
+      groups:
+        - app_store   # imports APP_STORE_APPLE_ID + APP_STORE_CONNECT_* keys used by the build-number auto-bump
       flutter: stable
       # Apple requires apps built with the iOS 26 SDK (Xcode 26+) for App Store uploads.
       # The earlier "module not found" failures were a pod-integration bug (fixed by
