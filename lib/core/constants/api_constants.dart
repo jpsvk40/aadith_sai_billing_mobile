@@ -57,6 +57,21 @@ class ApiConstants {
   // Mobile home (role-aware overview: financials + activity feed)
   static const String mobileHome = '/api/reports/mobile-home';
 
+  // Push notifications — device token registration (FCM) + per-type preferences
+  static const String deviceRegister = '/api/devices/register';
+  static const String deviceUnregister = '/api/devices/unregister';
+  static const String devicePreferences = '/api/devices/preferences';
+
+  // Command Center (ERP executive dashboard — same data as the web Command Center)
+  static const String moneyBand = '/api/dashboard/money-band';
+  static const String actionCenter = '/api/dashboard/action-center';
+  static const String actionCenterMine = '/api/dashboard/action-center?mine=1';
+  static const String myWork = '/api/dashboard/my-work';
+  // Module summaries powering the Executive / Operations / Finance lenses
+  static const String projectsSummary = '/api/projects/dashboard-summary';
+  static const String machinerySummary = '/api/machinery/dashboard-summary';
+  static const String tendersSummary = '/api/tenders/dashboard-summary';
+
   // Collections
   static const String collections = '/api/collections';
   static String collectionDetail(String id) => '/api/collections/$id';
@@ -72,6 +87,15 @@ class ApiConstants {
   static const String alerts = '/api/alerts';
   static String markAlertRead(String id) => '/api/alerts/$id/read';
 
+  // Approvals (owner action queue — cross-cutting approval requests)
+  static const String approvalRequests = '/api/approvals/requests';
+  static const String approvalSummary = '/api/approvals/summary';
+  static String approvalRequest(String id) => '/api/approvals/requests/$id';
+  static String approvalApprove(String id) => '/api/approvals/requests/$id/approve';
+  static String approvalReject(String id) => '/api/approvals/requests/$id/reject';
+  static String approvalHold(String id) => '/api/approvals/requests/$id/hold';
+  static String approvalResume(String id) => '/api/approvals/requests/$id/resume';
+
   // Customers
   static const String customers = '/api/customers';
   static String customerDetail(String id) => '/api/customers/$id';
@@ -81,6 +105,9 @@ class ApiConstants {
 
   // Projects (lite list — for Site-Logistics pickers)
   static const String projects = '/api/projects';
+  // ERP module lists (read-only tabs)
+  static const String machinery = '/api/machinery';
+  static const String tenders = '/api/tenders';
 
   // ─── Service & Warranty (warranty_service module) ───
   // Tickets
@@ -122,6 +149,14 @@ class ApiConstants {
   static const String serviceTechProductivity = '/api/service-reports/technician-productivity';
   static const String serviceRevenue = '/api/service-reports/service-revenue';
   static const String servicePartsUsage = '/api/service-reports/parts-usage';
+
+  // ─── Correspondence (Letters) ───
+  static const String letters = '/api/correspondence/letters';
+  static const String lettersDue = '/api/correspondence/letters/due';
+  static const String correspondenceSummary = '/api/correspondence/dashboard-summary';
+  static String letter(String id) => '/api/correspondence/letters/$id';
+  static String letterStatus(String id) => '/api/correspondence/letters/$id/status';
+  static String letterApprove(String id) => '/api/correspondence/letters/$id/approve';
 
   // Site Logistics
   static const String siteSurveys = '/api/project-sites/surveys';

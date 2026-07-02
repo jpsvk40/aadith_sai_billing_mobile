@@ -36,6 +36,10 @@
 	<string>Aadith Sai Cloud needs access to your photos to upload bill images for scanning.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Aadith Sai Cloud may save documents to your photo library.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -29,6 +29,9 @@ dependencies:
   signature: ^5.5.0       # Service: customer signature capture on delivery/handover
   mobile_scanner: ^5.2.3  # Service: scan serial/IMEI barcode for warranty lookup
   table_calendar: ^3.1.2  # Service: AMC visits + deadlines calendar
+  firebase_core: ^3.8.0            # Push: Firebase init (needs google-services.json / GoogleService-Info.plist)
+  firebase_messaging: ^15.1.6      # Push: FCM alerts → OS notifications
+  flutter_local_notifications: ^18.0.1  # Push: show FCM messages while app is foregrounded
 
 dev_dependencies:
   flutter_test:

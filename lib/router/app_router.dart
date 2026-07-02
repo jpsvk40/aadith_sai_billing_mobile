@@ -8,6 +8,9 @@ import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/reset_password_screen.dart';
 import '../features/auth/screens/splash_screen.dart';
 import '../features/alerts/screens/alerts_screen.dart';
+import '../features/approvals/screens/approvals_screen.dart';
+import '../features/reports/screens/reports_hub_screen.dart';
+import '../features/reports/screens/report_view_screen.dart';
 import '../features/collections/screens/collection_detail_screen.dart';
 import '../features/collections/screens/collection_list_screen.dart';
 import '../features/collections/screens/collection_payment_screen.dart';
@@ -41,6 +44,12 @@ import '../widgets/navigation/bottom_nav_bar.dart';
 import '../features/site_logistics/screens/site_logistics_screen.dart';
 import '../features/site_logistics/screens/survey_form_screen.dart';
 import '../features/site_logistics/screens/delivery_form_screen.dart';
+import '../features/correspondence/screens/letters_screen.dart';
+import '../features/correspondence/screens/letter_detail_screen.dart';
+import '../features/erp/screens/projects_screen.dart';
+import '../features/erp/screens/machinery_screen.dart';
+import '../features/erp/screens/tenders_screen.dart';
+import '../features/settings/screens/push_settings_screen.dart';
 import 'route_guards.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -148,6 +157,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => const CommissionScreen(),
             ),
             GoRoute(path: '/alerts', builder: (c, s) => const AlertsScreen()),
+            GoRoute(path: '/approvals', builder: (c, s) => const ApprovalsScreen()),
+            GoRoute(path: '/projects', builder: (c, s) => const ProjectsScreen()),
+            GoRoute(path: '/machinery', builder: (c, s) => const MachineryScreen()),
+            GoRoute(path: '/tenders', builder: (c, s) => const TendersScreen()),
+            GoRoute(
+              path: '/correspondence',
+              builder: (c, s) => LettersScreen(initialScope: s.uri.queryParameters['scope']),
+            ),
+            GoRoute(
+              path: '/correspondence/:id',
+              builder: (c, s) => LetterDetailScreen(letterId: int.parse(s.pathParameters['id']!)),
+            ),
+            GoRoute(path: '/reports', builder: (c, s) => const ReportsHubScreen()),
+            GoRoute(path: '/reports/view', builder: (c, s) => ReportViewScreen(config: s.extra as ReportConfig)),
             GoRoute(path: '/ask-business', builder: (c, s) => const AskBusinessScreen()),
             // ─── Service & Warranty ───
             GoRoute(path: '/service/dashboard', builder: (c, s) => const ServiceDashboardScreen()),
@@ -164,6 +187,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => TicketDetailScreen(ticketId: int.parse(s.pathParameters['id']!)),
             ),
             GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
+            GoRoute(path: '/settings/notifications', builder: (c, s) => const PushSettingsScreen()),
           ],
         ),
       ],

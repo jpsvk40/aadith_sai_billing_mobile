@@ -1,21 +1,19 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
-import '../../../data/network/api_client.dart';
-import '../../../data/repositories/ai_scan_repository.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../data/models/mobile_home_model.dart';
-import '../../purchases/screens/purchase_create_screen.dart';
+import '../../../data/models/command_center_model.dart';
 import '../../service/providers/service_providers.dart';
 import '../providers/home_provider.dart';
+import '../providers/command_center_provider.dart';
+import '../widgets/command_center_view.dart';
 
 // SkillTrackr-style palette
 const _heroA = Color(0xFF0369A1);
@@ -38,7 +36,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(homeProvider.notifier).load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(homeProvider.notifier).load();
+      final mods = ref.read(authProvider).user?.effectiveModules ?? const [];
+      ref.read(commandCenterProvider.notifier).load(modules: mods.toSet());
+    });
   }
 
   String _greeting() {
@@ -51,64 +53,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _soon(String w) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$w — coming in the next update')));
 
-  Future<void> _startScan() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Scan a Bill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-            ),
-            ListTile(leading: const Icon(Icons.camera_alt_outlined, color: AppColors.primary), title: const Text('Take Photo'), onTap: () => Navigator.pop(ctx, ImageSource.camera)),
-            ListTile(leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary), title: const Text('Choose from Gallery'), onTap: () => Navigator.pop(ctx, ImageSource.gallery)),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (source == null) return;
-
-    final XFile? file = await ImagePicker().pickImage(source: source, maxWidth: 1600, imageQuality: 82);
-    if (file == null || !mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(22),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 14),
-              Text('Reading the bill...'),
-            ]),
-          ),
-        ),
-      ),
-    );
-
-    try {
-      final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      final scanned = await AiScanRepository(client).scanVendorBill(file.path);
-      final bytes = await File(file.path).readAsBytes();
-      final dataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop(); // dismiss loading
-      context.push('/purchases/create', extra: PurchasePrefill(scanned: scanned, imageDataUrl: dataUrl));
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not read the bill — enter manually. ($e)'), backgroundColor: AppColors.danger),
-      );
-      context.push('/purchases/create');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(homeProvider);
@@ -119,6 +63,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ? (ref.watch(serviceDashboardProvider).valueOrNull?['kpis']?['openTotal'] as int?)
         : null;
     final o = state.overview ?? const HomeOverview();
+    // ERP companies (construction modules) get the lens-based command center home
+    // instead of the billing hero/P&L — no billing KPIs, useful for admins.
+    final isErp = user?.hasModule('projects') == true ||
+        user?.hasModule('machinery') == true ||
+        user?.hasModule('tender') == true;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: state.isLoading && state.overview == null
@@ -126,11 +75,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           : state.error != null && state.overview == null
               ? ErrorStateWidget(message: state.error!, onRetry: () => ref.read(homeProvider.notifier).load())
               : RefreshIndicator(
-                  onRefresh: () => ref.read(homeProvider.notifier).load(),
+                  onRefresh: () async {
+                    await ref.read(homeProvider.notifier).load();
+                    final mods = ref.read(authProvider).user?.effectiveModules ?? const [];
+                    await ref.read(commandCenterProvider.notifier).load(modules: mods.toSet());
+                  },
                   child: ListView(
                     padding: EdgeInsets.zero,
                     children: [
-                      o.isRep ? _repHero(context, o, user) : _hero(context, o, user, openTickets),
+                      o.isRep ? _repHero(context, o, user) : _hero(context, o, user, openTickets, isErp),
                       _sheet(o.isRep ? _repBody(context, o, user) : _ownerBody(o, user)),
                     ],
                   ),
@@ -151,11 +104,47 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // Service companies get a dedicated, service-only Home (no billing P&L / payroll / cash-flow noise).
     if (user?.hasModule('warranty_service') == true) return _serviceOwnerBody();
 
+    // ERP companies (construction) get the lens-based command center — no billing KPIs.
+    final isErp = user?.hasModule('projects') == true ||
+        user?.hasModule('machinery') == true ||
+        user?.hasModule('tender') == true;
+    if (isErp) {
+      return Column(
+        children: [
+          const CommandCenterView(),
+          const SizedBox(height: 20),
+          _quickAccess(),
+          const SizedBox(height: 20),
+          _recentActivity(o),
+          const SizedBox(height: 16),
+        ],
+      );
+    }
+
     final hasOrders = user?.hasModule('orders') == true;
+    final cc = ref.watch(commandCenterProvider);
+    final ac = cc.action;
+    final mb = cc.money;
     return Column(
       children: [
-        _scanBanner(),
-        const SizedBox(height: 20),
+        // ── Executive Command Center (mirrors the web Command Center) ──
+        if (ac != null && ac.totalItems > 0) ...[
+          _attentionHeader(ac),
+          const SizedBox(height: 14),
+        ],
+        if (mb != null) ...[
+          _execKpis(mb),
+          const SizedBox(height: 20),
+        ],
+        // Payment approvals waiting on the owner.
+        if (o.pendingApprovals > 0) ...[
+          _actionQueueBanner(o),
+          const SizedBox(height: 20),
+        ],
+        if (ac != null && ac.items.isNotEmpty) ...[
+          _actionCenter(ac),
+          const SizedBox(height: 20),
+        ],
         _quickAccess(),
         const SizedBox(height: 20),
         _plCard(o),
@@ -167,9 +156,219 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ],
         _outstandingAndCash(o),
         const SizedBox(height: 20),
+        // Money map — the payables side (what the owner owes vendors).
+        if (o.payablesOutstanding > 0) ...[
+          _payablesCard(o),
+          const SizedBox(height: 20),
+        ],
         _recentActivity(o),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  // ---------------- Owner action queue (Approvals) ----------------
+  Widget _actionQueueBanner(HomeOverview o) {
+    return GestureDetector(
+      onTap: () => context.go('/approvals'),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [_orange, Color(0xFFD97706)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: _orange.withValues(alpha: 0.28), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.fact_check_outlined, color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${o.pendingApprovals} awaiting your approval',
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  const Text('Payments, orders & vouchers need a decision', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ════════════ Executive Command Center ════════════
+  Widget _attentionHeader(ActionCenter ac) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _orange.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _orange.withValues(alpha: 0.30)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.bolt, color: _orange, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+              children: [
+                TextSpan(text: '${ac.totalItems} item${ac.totalItems == 1 ? '' : 's'} need attention'),
+                if (ac.urgent > 0) TextSpan(text: '  ·  ${ac.urgent} urgent', style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w800)),
+                if (ac.amountAtRisk > 0) TextSpan(text: '  ·  ${CurrencyUtils.formatCompact(ac.amountAtRisk)} at risk', style: const TextStyle(color: _orange, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _execKpis(MoneyBand mb) {
+    String money(double? v) => v == null ? '—' : CurrencyUtils.formatCompact(v);
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 2.2,
+      children: [
+        _kpiCard('Cash on hand', money(mb.cashOnHand), Icons.account_balance_wallet_outlined, AppColors.primary),
+        _kpiCard('Overdue AR', money(mb.overdueAR), Icons.schedule_outlined,
+            (mb.overdueAR ?? 0) > 0 ? AppColors.danger : AppColors.success,
+            sub: mb.overdueARCount > 0 ? '${mb.overdueARCount} invoices' : null),
+        _kpiCard('Payables', money(mb.payables), Icons.account_balance_outlined, _orange,
+            sub: mb.payablesCount > 0 ? '${mb.payablesCount} bills' : null),
+        _kpiCard('Margin', mb.marginPct == null ? '—' : '${mb.marginPct}%', Icons.trending_up, AppColors.success),
+      ],
+    );
+  }
+
+  Widget _kpiCard(String label, String value, IconData icon, Color color, {String? sub}) {
+    return _card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              if (sub != null) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _actionCenter(ActionCenter ac) {
+    Color sevColor(String s) => s == 'high' ? AppColors.danger : (s == 'medium' ? _orange : AppColors.textMuted);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Action Center', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        const SizedBox(height: 12),
+        _card(
+          child: Column(
+            children: List.generate(ac.items.length, (i) {
+              final it = ac.items[i];
+              final last = i == ac.items.length - 1;
+              final c = sevColor(it.severity);
+              return InkWell(
+                onTap: () => _openAction(it.actionUrl),
+                child: Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: last ? Colors.transparent : AppColors.divider, width: 0.6))),
+                  child: Row(children: [
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(it.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Text(it.module, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          if (it.amountAtRisk > 0) Text('  ·  ${CurrencyUtils.formatCompact(it.amountAtRisk)}', style: TextStyle(fontSize: 11, color: c, fontWeight: FontWeight.w600)),
+                          if (it.dueInDays != null)
+                            Text('  ·  ${it.dueInDays! < 0 ? '${-it.dueInDays!}d overdue' : (it.dueInDays == 0 ? 'due today' : 'in ${it.dueInDays}d')}',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                        ]),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      decoration: BoxDecoration(color: c.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(20)),
+                      child: Text('${it.count}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: c)),
+                    ),
+                  ]),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Map a web action route to the closest mobile screen; nudge to the web otherwise.
+  void _openAction(String? url) {
+    if (url == null) return;
+    const map = {
+      '/reports/outstanding': '/reports',
+      '/vendor-payments': '/purchases',
+      '/procurement': '/purchases',
+      '/site-logistics': '/site-logistics',
+    };
+    final target = map[url];
+    if (target != null) {
+      context.go(target);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Manage this in the web portal for now')));
+    }
+  }
+
+  // ---------------- Payables (money owed to vendors) ----------------
+  Widget _payablesCard(HomeOverview o) {
+    return GestureDetector(
+      onTap: () => context.go('/purchases'),
+      child: _card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.account_balance_outlined, color: AppColors.danger, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Payable to Vendors', style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(CurrencyUtils.format(o.payablesOutstanding), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              ]),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -562,7 +761,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // ---------------- Hero ----------------
-  Widget _hero(BuildContext context, HomeOverview o, dynamic user, int? openTickets) {
+  Widget _hero(BuildContext context, HomeOverview o, dynamic user, int? openTickets, [bool isErp = false]) {
     final companyName = o.companyName ?? user?.companyName ?? 'Your Business';
     final isService = openTickets != null;
     return ClipRRect(
@@ -619,11 +818,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
                                   child: Text('👑 ${_roleLabel(o.role)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
                                 ),
-                                const SizedBox(width: 8),
-                                Icon(Icons.trending_up, size: 13, color: o.plNet >= 0 ? _statGold : AppColors.danger),
-                                const SizedBox(width: 3),
-                                Text('${CurrencyUtils.formatCompact(o.plNet)} net',
-                                    style: TextStyle(color: o.plNet >= 0 ? _statGold : AppColors.danger, fontSize: 12, fontWeight: FontWeight.w800)),
+                                // Billing P&L chip is noise for ERP admins — hide it there.
+                                if (!isErp) ...[
+                                  const SizedBox(width: 8),
+                                  Icon(Icons.trending_up, size: 13, color: o.plNet >= 0 ? _statGold : AppColors.danger),
+                                  const SizedBox(width: 3),
+                                  Text('${CurrencyUtils.formatCompact(o.plNet)} net',
+                                      style: TextStyle(color: o.plNet >= 0 ? _statGold : AppColors.danger, fontSize: 12, fontWeight: FontWeight.w800)),
+                                ],
                               ],
                             ),
                           ],
@@ -631,42 +833,46 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  // glassy stat strip
-                  Row(
-                    children: [
-                      _heroStat(CurrencyUtils.formatCompact(o.revenueThisMonth), 'Revenue', _statBlue),
-                      const SizedBox(width: 8),
-                      _heroStat(CurrencyUtils.formatCompact(o.collectedThisMonth), 'Collected', _statGreen),
-                      const SizedBox(width: 8),
-                      // Service companies have no orders — surface open tickets instead.
-                      isService
-                          ? _heroStat('$openTickets', 'Open Jobs', _statPurple)
-                          : _heroStat('${o.ordersThisMonth}', 'Orders', _statPurple),
-                      const SizedBox(width: 8),
-                      _heroStat(CurrencyUtils.formatCompact(o.receivablesOutstanding), 'Outstanding', _statGold),
-                    ],
-                  ),
-                  // attention chip
-                  if (o.pendingApprovals > 0 || o.overdueInvoices > 0) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                      ),
-                      child: Row(
-                        children: [
-                          if (o.pendingApprovals > 0)
-                            Expanded(child: _attnSegment(Icons.fact_check_outlined, '${o.pendingApprovals} to approve', () => context.go('/payments?filter=Pending'))),
-                          if (o.pendingApprovals > 0 && o.overdueInvoices > 0)
-                            Container(width: 1, height: 22, color: Colors.white.withValues(alpha: 0.25)),
-                          if (o.overdueInvoices > 0)
-                            Expanded(child: _attnSegment(Icons.schedule, '${o.overdueInvoices} overdue', () => context.go('/invoices?filter=Overdue'))),
-                        ],
-                      ),
+                  // Billing stat strip + attention chip — only for billing companies.
+                  // ERP admins get the command-center attention header + money band below.
+                  if (!isErp) ...[
+                    const SizedBox(height: 20),
+                    // glassy stat strip
+                    Row(
+                      children: [
+                        _heroStat(CurrencyUtils.formatCompact(o.revenueThisMonth), 'Revenue', _statBlue),
+                        const SizedBox(width: 8),
+                        _heroStat(CurrencyUtils.formatCompact(o.collectedThisMonth), 'Collected', _statGreen),
+                        const SizedBox(width: 8),
+                        // Service companies have no orders — surface open tickets instead.
+                        isService
+                            ? _heroStat('$openTickets', 'Open Jobs', _statPurple)
+                            : _heroStat('${o.ordersThisMonth}', 'Orders', _statPurple),
+                        const SizedBox(width: 8),
+                        _heroStat(CurrencyUtils.formatCompact(o.receivablesOutstanding), 'Outstanding', _statGold),
+                      ],
                     ),
+                    // attention chip
+                    if (o.pendingApprovals > 0 || o.overdueInvoices > 0) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            if (o.pendingApprovals > 0)
+                              Expanded(child: _attnSegment(Icons.fact_check_outlined, '${o.pendingApprovals} to approve', () => context.go('/approvals'))),
+                            if (o.pendingApprovals > 0 && o.overdueInvoices > 0)
+                              Container(width: 1, height: 22, color: Colors.white.withValues(alpha: 0.25)),
+                            if (o.overdueInvoices > 0)
+                              Expanded(child: _attnSegment(Icons.schedule, '${o.overdueInvoices} overdue', () => context.go('/invoices?filter=Overdue'))),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -769,42 +975,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  // ---------------- Scan banner (Academy-Calendar equivalent) ----------------
-  Widget _scanBanner() {
-    return GestureDetector(
-      onTap: _startScan,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.document_scanner_outlined, color: Colors.white, size: 26),
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Scan a Bill', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
-                  SizedBox(height: 2),
-                  Text('Snap a vendor bill to create a purchase', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 18, color: Colors.white.withValues(alpha: 0.7)),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ---------------- Quick Access ----------------
   Widget _quickAccess() {
     final user = ref.read(authProvider).user;
@@ -827,15 +997,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Site Logistics belongs to the Project & Contract (ERP) module — hide it for billing-only companies.
       if (has('projects'))
         (Icons.location_on_outlined, 'Site Logistics', const Color(0xFF0EA5E9), () => context.go('/site-logistics')),
+      // Correspondence — letters awaiting reply are actionable on mobile.
+      if (has('correspondence'))
+        (Icons.mail_outline, 'Letters', const Color(0xFF0284C7), () => context.go('/correspondence')),
+      // Payments moved off the ERP bottom nav — keep it reachable here.
       if (has('payments'))
-        (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/payments?filter=Pending')),
+        (Icons.payments_outlined, 'Payments', const Color(0xFF059669), () => context.go('/payments')),
+      (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/approvals')),
       if (has('invoices'))
         (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),
       if (has('collections'))
         (Icons.account_balance_wallet_outlined, 'Collections', const Color(0xFF0891B2), () => context.go('/collections')),
       // "Ask AI" lives in the always-on floating launcher now (see FloatingAssistantButton).
       if (has('reports'))
-        (Icons.insights_outlined, 'Reports', AppColors.danger, () => isService ? context.go('/service/reports') : _soon('Reports')),
+        (Icons.insights_outlined, 'Reports', AppColors.danger, () => isService ? context.go('/service/reports') : context.go('/reports')),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -892,7 +1067,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sectionHeader('This Month P&L', 'View Report', () => _soon('Report')),
+            _sectionHeader('This Month P&L', 'View Report', () => context.go('/reports')),
             const SizedBox(height: 12),
             Row(
               children: [

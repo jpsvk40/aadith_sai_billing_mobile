@@ -13,7 +13,7 @@ class FloatingAssistantButton extends ConsumerStatefulWidget {
 }
 
 class _FloatingAssistantButtonState extends ConsumerState<FloatingAssistantButton> with SingleTickerProviderStateMixin {
-  static const double _size = 58;
+  static const double _size = 52;
   late final AnimationController _pulse;
   double? _dx; // null → default (snaps to bottom-right)
   double? _dy;
@@ -43,7 +43,9 @@ class _FloatingAssistantButtonState extends ConsumerState<FloatingAssistantButto
 
     final media = MediaQuery.of(context).size;
     final maxX = media.width - _size - 12;
-    final maxY = media.height - _size - 170; // keep clear of the bottom nav
+    // Default: tuck into the bottom-right corner just above the nav bar so it
+    // sits over empty space, not the Action Center count badges.
+    final maxY = media.height - _size - 96; // clear of the bottom nav
     final x = (_dx ?? maxX).clamp(8.0, maxX);
     final y = (_dy ?? maxY).clamp(90.0, maxY);
 

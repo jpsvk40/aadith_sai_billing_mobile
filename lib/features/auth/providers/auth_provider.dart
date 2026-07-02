@@ -6,6 +6,7 @@ import '../../../data/local/secure_storage.dart';
 import '../../../data/local/cache_storage.dart';
 import '../../../core/errors/app_exceptions.dart';
 import '../../../core/utils/startup_diagnostics.dart';
+import '../../../core/services/push_service.dart';
 import 'dart:convert';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
@@ -71,6 +72,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await CacheStorage.setString('auth_user', jsonEncode(user.toJson()));
       StartupDiagnostics.reportAsync('checkSession: refreshed user from API');
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      PushService.instance.registerToken();
     } catch (e) {
       // Only force logout on a genuine auth failure (401). For transient errors
       // (backend reloading, offline, timeout, server 500) keep the existing
@@ -98,12 +100,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = result['user'] as AuthUser;
       await CacheStorage.setString('auth_user', jsonEncode(user.toJson()));
       state = AuthState(status: AuthStatus.authenticated, user: user);
+      PushService.instance.registerToken();
     } catch (e) {
       state = state.copyWith(status: AuthStatus.error, error: e.toString());
     }
   }
 
   Future<void> logout() async {
+    await PushService.instance.unregister();
     await _repo.logout();
     await CacheStorage.clear();
     ApiClient.reset();

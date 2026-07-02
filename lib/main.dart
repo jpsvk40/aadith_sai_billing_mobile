@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'app.dart';
 import 'core/utils/startup_diagnostics.dart';
+import 'core/services/push_service.dart';
 import 'data/local/cache_storage.dart';
 
 void main() {
@@ -50,6 +51,10 @@ class _BootstrapAppState extends State<BootstrapApp> {
       setState(() => _stage = 'Loading app cache...');
       StartupDiagnostics.reportAsync(_stage);
       await CacheStorage.init().timeout(const Duration(seconds: 10));
+
+      // Push notifications (FCM) — fire-and-forget so it can NEVER block the first
+      // frame. No-ops silently if Firebase isn't configured yet.
+      unawaited(PushService.instance.init());
 
       if (!mounted) return;
       setState(() {

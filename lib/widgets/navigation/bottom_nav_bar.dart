@@ -15,7 +15,13 @@ class AppBottomNavBar extends ConsumerWidget {
   static const _collections = _NavTab(label: 'Collections', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, route: '/collections');
   static const _commission = _NavTab(label: 'Commission', icon: Icons.percent_outlined, activeIcon: Icons.percent, route: '/commissions');
   static const _alerts = _NavTab(label: 'Alerts', icon: Icons.notifications_outlined, activeIcon: Icons.notifications, route: '/alerts');
+  static const _approvals = _NavTab(label: 'Approvals', icon: Icons.fact_check_outlined, activeIcon: Icons.fact_check, route: '/approvals');
   static const _profile = _NavTab(label: 'Profile', icon: Icons.person_outline, activeIcon: Icons.person, route: '/profile');
+  // ERP (construction) module tabs — replace Payments/Approvals for ERP admins.
+  static const _projects = _NavTab(label: 'Projects', icon: Icons.apartment_outlined, activeIcon: Icons.apartment, route: '/projects');
+  static const _tenders = _NavTab(label: 'Tenders', icon: Icons.gavel_outlined, activeIcon: Icons.gavel, route: '/tenders');
+  static const _machinery = _NavTab(label: 'Machinery', icon: Icons.agriculture_outlined, activeIcon: Icons.agriculture, route: '/machinery');
+  static const _letters = _NavTab(label: 'Letters', icon: Icons.mail_outline, activeIcon: Icons.mail, route: '/correspondence');
   // Service & Warranty persona tabs.
   static const _myTickets = _NavTab(label: 'My Tickets', icon: Icons.build_circle_outlined, activeIcon: Icons.build_circle, route: '/service/tickets');
   static const _today = _NavTab(label: 'Today', icon: Icons.event_outlined, activeIcon: Icons.event, route: '/service/today');
@@ -38,11 +44,24 @@ class AppBottomNavBar extends ConsumerWidget {
       if (user?.hasModule('collections') == true) tabs.add(_collections);
       if (user?.hasModule('reports') == true) tabs.add(_commission);
     } else {
-      // Owner / admin / manager.
-      if (user?.hasModule('orders') == true) tabs.add(_orders);
-      if (user?.hasModule('payments') == true) tabs.add(_payments);
-      if (user?.hasModule('warranty_service') == true) tabs.add(_service);
-      if (user?.hasModule('alerts') == true) tabs.add(_alerts);
+      // ERP (construction) admins get their module tabs — Projects/Tenders/Machinery/Letters —
+      // instead of Payments/Approvals (those stay reachable from Home quick-access + Action Center).
+      final isErp = user?.hasModule('projects') == true ||
+          user?.hasModule('machinery') == true ||
+          user?.hasModule('tender') == true;
+      if (isErp) {
+        if (user?.hasModule('projects') == true) tabs.add(_projects);
+        if (user?.hasModule('tender') == true) tabs.add(_tenders);
+        if (user?.hasModule('machinery') == true) tabs.add(_machinery);
+        if (user?.hasModule('correspondence') == true) tabs.add(_letters);
+      } else {
+        // Owner / admin / manager (billing). Approvals is the owner's action surface and replaces
+        // the generic Alerts tab (alerts stay reachable via the hero bell + Home exceptions).
+        if (user?.hasModule('orders') == true) tabs.add(_orders);
+        if (user?.hasModule('payments') == true) tabs.add(_payments);
+        if (user?.hasModule('warranty_service') == true) tabs.add(_service);
+        tabs.add(_approvals);
+      }
     }
     tabs.add(_profile);
     return tabs;
@@ -61,6 +80,8 @@ class AppBottomNavBar extends ConsumerWidget {
     final tabs = _getTabsForUser(user);
     final location = GoRouterState.of(context).matchedLocation;
     final currentIndex = _currentIndex(location, tabs);
+    // Scale down when there are many tabs (ERP admins can have 6) so labels don't clip.
+    final many = tabs.length >= 6;
 
     return Scaffold(
       body: Stack(
@@ -82,12 +103,12 @@ class AppBottomNavBar extends ConsumerWidget {
           type: BottomNavigationBarType.fixed,
           backgroundColor: AppColors.surface,
           elevation: 0,
-          iconSize: 26,
+          iconSize: many ? 22 : 26,
           selectedItemColor: AppColors.primary,
           unselectedItemColor: AppColors.textSecondary,
           showUnselectedLabels: true,
-          selectedFontSize: 12,
-          unselectedFontSize: 11.5,
+          selectedFontSize: many ? 10 : 12,
+          unselectedFontSize: many ? 9.5 : 11.5,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
           items: tabs

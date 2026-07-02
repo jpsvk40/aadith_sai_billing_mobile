@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/profile_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
@@ -84,6 +85,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 if (user.companyName != null) _InfoRow(label: 'Company', value: user.companyName!),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Settings
+        Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            leading: const Icon(Icons.notifications_outlined, color: AppColors.primary),
+            title: const Text('Notification Settings'),
+            subtitle: const Text('Choose which alerts push to this device'),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+            onTap: () => context.push('/settings/notifications'),
           ),
         ),
         const SizedBox(height: 24),
