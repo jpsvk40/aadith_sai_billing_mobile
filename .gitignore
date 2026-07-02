@@ -48,7 +48,6 @@ app.*.map.json
 *.g.dart
 *.freezed.dart
 
-# Firebase config (secret — never commit)
-android/app/google-services.json
-
-ios/Runner/GoogleService-Info.plist
+# Firebase CLIENT config — safe to commit (ships inside the app bundle; API key
+# is a project identifier, not a secret). Required by CI (Codemagic) at build time.
+# The genuinely-secret backend service-account key lives in the backend repo and stays ignored.

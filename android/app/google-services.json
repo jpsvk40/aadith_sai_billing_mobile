@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "22395148260",
+    "project_id": "aadith-sai-cloud-business",
+    "storage_bucket": "aadith-sai-cloud-business.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:22395148260:android:d343bf628ded5e72fdd9f1",
+        "android_client_info": {
+          "package_name": "com.aadithsai.aadith_sai_billing_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCb30uTN5amiqLH_RfkXgAvwSI4ep--PLI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
