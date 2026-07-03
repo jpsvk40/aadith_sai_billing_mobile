@@ -97,6 +97,24 @@ class ServiceRepository {
     return data as Map<String, dynamic>;
   }
 
+  /// Printable job-sheet payload ({company, ticket}) — on-site reference for the technician.
+  Future<Map<String, dynamic>> jobSheet(int id) async {
+    final data = await _client.get(ApiConstants.serviceTicketJobSheet('$id'));
+    return (data as Map).cast<String, dynamic>();
+  }
+
+  /// Service report / e-certificate data (charges, parts, AI work summary, multi-language UI strings).
+  Future<Map<String, dynamic>> serviceReport(int id) async {
+    final data = await _client.get(ApiConstants.serviceTicketReport('$id'));
+    return (data as Map).cast<String, dynamic>();
+  }
+
+  /// Signed public tracking link for the customer ({token, trackPath}).
+  Future<Map<String, dynamic>> shareLink(int id) async {
+    final data = await _client.get(ApiConstants.serviceTicketShare('$id'));
+    return (data as Map).cast<String, dynamic>();
+  }
+
   // ─── Attachments (photos + signed handover) ───
   Future<List<ServiceAttachment>> getAttachments(int id) async {
     final data = await _client.get(ApiConstants.serviceTicketAttachments('$id'));

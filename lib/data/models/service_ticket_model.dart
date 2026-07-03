@@ -138,6 +138,7 @@ class ServiceTicket {
   final String paymentStatus;
   final String estimateStatus;
   final double? estimateAmount;
+  final String? estimateNotes;
   final int? invoiceId;
   final DateTime? reportedAt;
   final DateTime? promisedAt;
@@ -173,6 +174,7 @@ class ServiceTicket {
     this.paymentStatus = 'Unpaid',
     this.estimateStatus = 'NONE',
     this.estimateAmount,
+    this.estimateNotes,
     this.invoiceId,
     this.reportedAt,
     this.promisedAt,
@@ -213,6 +215,7 @@ class ServiceTicket {
       paymentStatus: (j['paymentStatus'] ?? 'Unpaid').toString(),
       estimateStatus: (j['estimateStatus'] ?? 'NONE').toString(),
       estimateAmount: j['estimateAmount'] != null ? _toD(j['estimateAmount']) : null,
+      estimateNotes: j['estimateNotes']?.toString(),
       invoiceId: j['invoiceId'] as int?,
       reportedAt: j['reportedAt'] != null ? DateTime.tryParse(j['reportedAt'].toString()) : null,
       promisedAt: j['promisedAt'] != null ? DateTime.tryParse(j['promisedAt'].toString()) : null,

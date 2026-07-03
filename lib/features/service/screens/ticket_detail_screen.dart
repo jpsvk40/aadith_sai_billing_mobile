@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -7,6 +8,7 @@ import 'package:signature/signature.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
@@ -27,6 +29,8 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   bool _busy = false;
+  ServiceTriage? _triage; // inline AI diagnosis (probable causes / parts / checklist)
+  bool _triaging = false;
 
   void _refresh() {
     ref.invalidate(ticketDetailProvider(widget.ticketId));
@@ -77,6 +81,26 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
           onPressed: () => context.canPop() ? context.pop() : context.go('/service/tickets'),
         ),
         title: Text(async.valueOrNull?.ticketNumber ?? 'Ticket'),
+        actions: [
+          if (async.valueOrNull != null)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (v) {
+                final t = async.value!;
+                switch (v) {
+                  case 'jobsheet': _showJobSheet(t); break;
+                  case 'certificate': _showCertificate(t); break;
+                  case 'share': _shareTracking(t); break;
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(value: 'jobsheet', child: ListTile(dense: true, leading: Icon(Icons.description_outlined), title: Text('Job sheet'))),
+                if (['READY', 'DELIVERED', 'CLOSED'].contains(async.value!.status))
+                  const PopupMenuItem(value: 'certificate', child: ListTile(dense: true, leading: Icon(Icons.workspace_premium_outlined), title: Text('Service certificate'))),
+                const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share tracking link'))),
+              ],
+            ),
+        ],
       ),
       body: async.when(
         loading: () => const LoadingIndicator(),
@@ -134,9 +158,15 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                 icon: const Icon(Icons.edit_note, size: 18),
                 label: const Text('Update'),
               )),
+              const SizedBox(height: 12),
+              _aiDiagnosisSection(t),
               if (canBill) ...[
                 const SizedBox(height: 12),
                 _adminSection(t),
+              ] else if (t.estimateStatus != 'NONE') ...[
+                // Technician view: the estimate decides whether they may proceed — show it read-only.
+                const SizedBox(height: 12),
+                _estimateInfoSection(t),
               ],
               const SizedBox(height: 12),
               _partsSection(t),
@@ -271,8 +301,28 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
 
   // ─── Parts ───
   Widget _partsSection(ServiceTicket t) {
+    final suggested = _triage?.suggestedParts ?? const [];
     return _section('Spare Parts', [
       if (t.parts.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('No parts added.', style: TextStyle(color: AppColors.textSecondary))),
+      // AI-suggested parts (from the diagnosis) — tap to look them up & add.
+      if (t.isOpen && suggested.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: Row(children: [
+            const Icon(Icons.auto_awesome, size: 14, color: Color(0xFF7C3AED)),
+            const SizedBox(width: 5),
+            const Text('AI-suggested parts', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF6D28D9))),
+          ]),
+        ),
+        Wrap(spacing: 6, runSpacing: 6, children: suggested.map((p) => ActionChip(
+              avatar: const Icon(Icons.add, size: 15, color: Color(0xFF6D28D9)),
+              label: Text(p, style: const TextStyle(fontSize: 11.5, color: Color(0xFF6D28D9), fontWeight: FontWeight.w600)),
+              backgroundColor: const Color(0xFFF5F3FF),
+              side: const BorderSide(color: Color(0xFFDDD6FE)),
+              onPressed: _busy ? null : () => _addPart(t, query: p),
+            )).toList()),
+        const Divider(height: 20),
+      ],
       ...t.parts.map((p) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -543,11 +593,11 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     await _run(() => ref.read(serviceRepositoryProvider).uploadAttachment(t.id, picked.path, kind: kind), success: 'Photo added');
   }
 
-  Future<void> _addPart(ServiceTicket t) async {
+  Future<void> _addPart(ServiceTicket t, {String? query}) async {
     final result = await showModalBottomSheet<_PartPick>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => _AddPartSheet(repoRef: ref),
+      builder: (ctx) => _AddPartSheet(repoRef: ref, initialSearch: query),
     );
     if (result == null) return;
     await _run(() => ref.read(serviceRepositoryProvider).addPart(t.id, inventoryItemId: result.item.id, quantity: result.qty, unitPrice: result.price), success: 'Part added');
@@ -633,6 +683,325 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     await _run(() => ref.read(serviceRepositoryProvider).updateTicket(t.id, {'diagnosis': diagCtrl.text.trim(), 'resolution': resCtrl.text.trim()}), success: 'Updated');
   }
 
+  // ─── Read-only estimate (technician view) ───
+  Widget _estimateInfoSection(ServiceTicket t) {
+    final s = t.estimateStatus;
+    final color = s == 'APPROVED' ? AppColors.success : (s == 'REJECTED' ? AppColors.danger : AppColors.warning);
+    final headline = s == 'APPROVED'
+        ? 'Customer approved — OK to proceed with the repair.'
+        : s == 'REJECTED'
+            ? 'Customer rejected the estimate — check with the office before doing chargeable work.'
+            : 'Awaiting customer approval — hold chargeable work until approved.';
+    return _section('Estimate', [
+      Row(children: [
+        Icon(s == 'APPROVED' ? Icons.check_circle : (s == 'REJECTED' ? Icons.cancel : Icons.hourglass_top), size: 18, color: color),
+        const SizedBox(width: 6),
+        Text(s, style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+        if (t.estimateAmount != null) ...[
+          const SizedBox(width: 8),
+          Text(CurrencyUtils.format(t.estimateAmount), style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ]),
+      const SizedBox(height: 6),
+      Text(headline, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+      if ((t.estimateNotes ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Scope: ${t.estimateNotes}', style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+    ]);
+  }
+
+  // ─── Job sheet (printable on-site reference) ───
+  Future<void> _showJobSheet(ServiceTicket t) async {
+    final data = await _run(() => ref.read(serviceRepositoryProvider).jobSheet(t.id));
+    if (data == null || !mounted) return;
+    final company = (data['company'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final tk = (data['ticket'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final parts = (tk['parts'] as List? ?? const []).cast<Map>();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false, initialChildSize: 0.85, maxChildSize: 0.95,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.all(20),
+          children: [
+            Center(child: Text(company['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+            if ((company['phone'] ?? '').toString().isNotEmpty) Center(child: Text(company['phone'].toString(), style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+            const Divider(height: 24),
+            Center(child: Text('JOB SHEET · ${t.ticketNumber}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.5))),
+            const SizedBox(height: 14),
+            _kv('Customer', t.customerName),
+            if ((t.customer?.phone ?? '').isNotEmpty) _kv('Phone', t.customer!.phone!),
+            if (t.serviceItem != null) ...[
+              _kv('Device', t.serviceItem!.label),
+              if (t.serviceItem!.serialNumber != null) _kv('Serial', t.serviceItem!.serialNumber!),
+            ],
+            _kv('Type', ServiceStatus.serviceTypeLabel(t.serviceType)),
+            _kv('Status', ServiceStatus.label(t.status)),
+            _kv('Reported', AppDateUtils.formatDisplay(t.reportedAt)),
+            if (t.promisedAt != null) _kv('Promised', AppDateUtils.formatDisplay(t.promisedAt)),
+            const Divider(height: 24),
+            _kv('Problem', t.reportedProblem),
+            if ((t.intakeCondition ?? '').isNotEmpty) _kv('Intake condition', t.intakeCondition!),
+            if (t.accessories.isNotEmpty) _kv('Accessories', t.accessories.join(', ')),
+            if ((t.diagnosis ?? '').isNotEmpty) _kv('Diagnosis', t.diagnosis!),
+            if (parts.isNotEmpty) ...[
+              const Divider(height: 24),
+              const Text('Parts', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              ...parts.map((p) {
+                final item = (p['item'] as Map?)?.cast<String, dynamic>();
+                return _kv(item?['itemName']?.toString() ?? 'Part', '${p['quantity']} × ₹${p['unitPrice']}');
+              }),
+            ],
+            if (t.isChargeable) ...[
+              const Divider(height: 24),
+              _kv('Labour', CurrencyUtils.format(t.labourCharge)),
+              _kv('Total', CurrencyUtils.format(t.totalCharge)),
+              if (t.advanceAmount > 0) _kv('Advance', CurrencyUtils.format(t.advanceAmount)),
+              _kv('Balance', CurrencyUtils.format(t.balanceAmount)),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Service certificate / report (post-completion proof of work) ───
+  Future<void> _showCertificate(ServiceTicket t) async {
+    final r = await _run(() => ref.read(serviceRepositoryProvider).serviceReport(t.id));
+    if (r == null || !mounted) return;
+    final parts = (r['parts'] as List? ?? const []).cast<Map>();
+    final charges = (r['charges'] as Map?)?.cast<String, dynamic>() ?? const {};
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false, initialChildSize: 0.85, maxChildSize: 0.95,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.all(20),
+          children: [
+            Center(child: Text(r['company']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+            const SizedBox(height: 4),
+            const Center(child: Text('SERVICE REPORT', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1.2))),
+            Center(child: Text(r['ticketNumber']?.toString() ?? '', style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+            const Divider(height: 24),
+            if ((r['aiSummary'] ?? '').toString().isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(10)),
+                child: Text(r['aiSummary'].toString(), style: const TextStyle(fontSize: 13, height: 1.4)),
+              ),
+            _kv('Status', (r['statusLabel'] ?? r['status'] ?? '').toString()),
+            _kv('Warranty', (r['warrantyLabel'] ?? '').toString()),
+            _kv('Problem', (r['reportedProblem'] ?? '').toString()),
+            if ((r['diagnosis'] ?? '').toString().isNotEmpty) _kv('Diagnosis', r['diagnosis'].toString()),
+            if ((r['resolution'] ?? '').toString().isNotEmpty) _kv('Resolution', r['resolution'].toString()),
+            if (parts.isNotEmpty) ...[
+              const Divider(height: 24),
+              const Text('Parts used', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              ...parts.map((p) => _kv(p['name']?.toString() ?? 'Part', '${p['qty']}${p['unit'] != null ? ' ${p['unit']}' : ''} · ₹${p['lineTotal']}')),
+            ],
+            if (r['isChargeable'] == true) ...[
+              const Divider(height: 24),
+              _kv('Labour', '₹${charges['labour'] ?? 0}'),
+              _kv('Parts', '₹${charges['partsTotal'] ?? 0}'),
+              _kv('Total', '₹${charges['total'] ?? 0}'),
+              _kv('Paid', '₹${charges['paid'] ?? 0}'),
+              _kv('Balance', '₹${charges['balance'] ?? 0}'),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Share the public repair-tracking link with the customer ───
+  Future<void> _shareTracking(ServiceTicket t) async {
+    final r = await _run(() => ref.read(serviceRepositoryProvider).shareLink(t.id));
+    if (r == null || !mounted) return;
+    final url = '${ApiConstants.webBaseUrl}${r['trackPath']}';
+    final msg = 'Track your repair ${t.ticketNumber} here: $url';
+    final phone = (t.customer?.phone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(padding: EdgeInsets.all(16), child: Text('Share tracking link', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(url, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.copy),
+            title: const Text('Copy link'),
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: url));
+              if (ctx.mounted) Navigator.pop(ctx);
+              _snack('Link copied');
+            },
+          ),
+          if (phone.isNotEmpty)
+            ListTile(
+              leading: const Icon(Icons.chat),
+              title: const Text('Send on WhatsApp'),
+              onTap: () async {
+                final wa = Uri.parse('https://wa.me/91$phone?text=${Uri.encodeComponent(msg)}');
+                if (await canLaunchUrl(wa)) await launchUrl(wa, mode: LaunchMode.externalApplication);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+          if (phone.isNotEmpty)
+            ListTile(
+              leading: const Icon(Icons.sms_outlined),
+              title: const Text('Send SMS'),
+              onTap: () async {
+                final sms = Uri.parse('sms:$phone?body=${Uri.encodeComponent(msg)}');
+                if (await canLaunchUrl(sms)) await launchUrl(sms);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  // ─── AI diagnosis help mid-job (triage suggestion for the technician) ───
+  // ─── Inline AI diagnosis (probable causes / suggested parts / checklist) ───
+  Future<void> _runTriage(ServiceTicket t) async {
+    setState(() => _triaging = true);
+    try {
+      final triage = await ref.read(serviceRepositoryProvider).aiTriage(
+            reportedProblem: [t.reportedProblem, if ((t.diagnosis ?? '').isNotEmpty) 'Current diagnosis: ${t.diagnosis}'].join('\n'),
+            category: t.serviceItem?.category,
+            brand: t.serviceItem?.brand,
+            modelName: t.serviceItem?.modelName,
+            underWarranty: !t.isChargeable,
+          );
+      if (mounted) setState(() => _triage = triage);
+    } catch (e) {
+      final msg = e.toString().toLowerCase().contains('not configured')
+          ? "AI Assist isn't configured on the server (missing OpenAI key)."
+          : e.toString();
+      _snack(msg, error: true);
+    } finally {
+      if (mounted) setState(() => _triaging = false);
+    }
+  }
+
+  Widget _aiDiagnosisSection(ServiceTicket t) {
+    final tri = _triage;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDDD6FE)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.auto_awesome, size: 18, color: Color(0xFF7C3AED)),
+          const SizedBox(width: 6),
+          const Expanded(child: Text('AI Diagnosis', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: Color(0xFF6D28D9)))),
+          if (tri != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFDDD6FE))),
+              child: Text(ServiceStatus.label(tri.priority), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF6D28D9))),
+            ),
+        ]),
+        if (tri == null) ...[
+          const SizedBox(height: 6),
+          const Text('Get AI-suggested causes, likely parts and a diagnostic checklist for this repair.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: _pillButton(
+              _triaging ? 'Analysing…' : 'Get AI diagnosis',
+              _triaging ? null : () => _runTriage(t),
+              busy: _triaging,
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 10),
+          if (tri.faultCategory.isNotEmpty) _aiLine('Fault', tri.faultCategory),
+          if (tri.estimatedLabour > 0) _aiLine('Est. labour', CurrencyUtils.format(tri.estimatedLabour.toDouble())),
+          if (tri.estimatedTurnaroundDays != null) _aiLine('Turnaround', '${tri.estimatedTurnaroundDays} day(s)'),
+          if (tri.probableCauses.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Probable causes', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: Color(0xFF4C1D95))),
+            const SizedBox(height: 2),
+            ...tri.probableCauses.map((c) => Padding(padding: const EdgeInsets.symmetric(vertical: 1), child: Text('•  $c', style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)))),
+          ],
+          if (tri.suggestedParts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Likely parts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: Color(0xFF4C1D95))),
+            const SizedBox(height: 4),
+            Wrap(spacing: 6, runSpacing: 6, children: tri.suggestedParts.map((p) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFFDDD6FE))),
+                  child: Text(p, style: const TextStyle(fontSize: 11.5, color: Color(0xFF6D28D9), fontWeight: FontWeight.w600)),
+                )).toList()),
+            if (t.isOpen)
+              const Padding(padding: EdgeInsets.only(top: 4), child: Text('Add these from Spare Parts below.', style: TextStyle(fontSize: 11, color: AppColors.textMuted))),
+          ],
+          if (tri.diagnosticChecklist.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Diagnostic checklist', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: Color(0xFF4C1D95))),
+            const SizedBox(height: 2),
+            ...tri.diagnosticChecklist.map((c) => Padding(padding: const EdgeInsets.symmetric(vertical: 1), child: Text('☐  $c', style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)))),
+          ],
+          const SizedBox(height: 8),
+          Row(children: [
+            const Expanded(child: Text('AI suggestion — verify before acting.', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted, fontStyle: FontStyle.italic))),
+            TextButton(
+              onPressed: _triaging ? null : () => _runTriage(t),
+              style: TextButton.styleFrom(minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 8), foregroundColor: const Color(0xFF6D28D9)),
+              child: const Text('Refresh', style: TextStyle(fontSize: 12.5)),
+            ),
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  Widget _aiLine(String k, String v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          SizedBox(width: 92, child: Text(k, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary))),
+          Expanded(child: Text(v, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary))),
+        ]),
+      );
+
+  // Plain tappable pill (avoids Material-button rendering quirks in scroll views).
+  Widget _pillButton(String label, VoidCallback? onTap, {bool busy = false}) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: onTap == null ? const Color(0xFFA78BDA) : const Color(0xFF7C3AED),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            if (busy)
+              const SizedBox(height: 15, width: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            else
+              const Icon(Icons.auto_awesome, size: 17, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+          ]),
+        ),
+      );
+
   // ─── small layout helpers ───
   Widget _section(String title, List<Widget> children, {Widget? trailing}) {
     return Container(
@@ -669,7 +1038,8 @@ class _PartPick {
 
 class _AddPartSheet extends ConsumerStatefulWidget {
   final WidgetRef repoRef;
-  const _AddPartSheet({required this.repoRef});
+  final String? initialSearch;
+  const _AddPartSheet({required this.repoRef, this.initialSearch});
   @override
   ConsumerState<_AddPartSheet> createState() => _AddPartSheetState();
 }
@@ -685,7 +1055,9 @@ class _AddPartSheetState extends ConsumerState<_AddPartSheet> {
   @override
   void initState() {
     super.initState();
-    _search('');
+    final q = widget.initialSearch ?? '';
+    _searchCtrl.text = q;
+    _search(q);
   }
 
   Future<void> _search(String q) async {
