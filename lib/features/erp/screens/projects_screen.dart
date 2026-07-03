@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/erp_list_models.dart';
@@ -67,17 +68,20 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     );
   }
 
-  Widget _card(Project p) => ErpCard(
-        icon: Icons.apartment_outlined,
-        color: _accent,
-        title: p.projectName,
-        code: p.projectCode,
-        status: p.status,
-        rows: [
-          if ((p.customerName ?? '').isNotEmpty) ('Customer', p.customerName!),
-          if (p.contractValue > 0) ('Contract', CurrencyUtils.formatCompact(p.contractValue)),
-          if ((p.workOrderNo ?? '').isNotEmpty) ('Work order', p.workOrderNo!),
-          if ((p.city ?? '').isNotEmpty) ('City', p.city!),
-        ],
+  Widget _card(Project p) => GestureDetector(
+        onTap: () => context.push('/projects/${p.id}'),
+        child: ErpCard(
+          icon: Icons.apartment_outlined,
+          color: _accent,
+          title: p.projectName,
+          code: p.projectCode,
+          status: p.status,
+          rows: [
+            if ((p.customerName ?? '').isNotEmpty) ('Customer', p.customerName!),
+            if (p.contractValue > 0) ('Contract', CurrencyUtils.formatCompact(p.contractValue)),
+            if ((p.workOrderNo ?? '').isNotEmpty) ('Work order', p.workOrderNo!),
+            if ((p.city ?? '').isNotEmpty) ('City', p.city!),
+          ],
+        ),
       );
 }

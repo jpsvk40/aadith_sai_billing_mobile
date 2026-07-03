@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/erp_list_models.dart';
@@ -69,17 +70,20 @@ class _TendersScreenState extends ConsumerState<TendersScreen> {
     );
   }
 
-  Widget _card(Tender t) => ErpCard(
-        icon: Icons.gavel_outlined,
-        color: _accent,
-        title: t.title,
-        code: t.tenderCode,
-        status: t.status,
-        rows: [
-          if ((t.authority ?? '').isNotEmpty) ('Authority', t.authority!),
-          if (t.estimatedValue > 0) ('Est. value', CurrencyUtils.formatCompact(t.estimatedValue)),
-          if (t.emdAmount > 0) ('EMD', CurrencyUtils.formatCompact(t.emdAmount)),
-          if (t.submissionDeadline != null) ('Submit by', _date(t.submissionDeadline)),
-        ],
+  Widget _card(Tender t) => GestureDetector(
+        onTap: () => context.push('/tenders/${t.id}'),
+        child: ErpCard(
+          icon: Icons.gavel_outlined,
+          color: _accent,
+          title: t.title,
+          code: t.tenderCode,
+          status: t.status,
+          rows: [
+            if ((t.authority ?? '').isNotEmpty) ('Authority', t.authority!),
+            if (t.estimatedValue > 0) ('Est. value', CurrencyUtils.formatCompact(t.estimatedValue)),
+            if (t.emdAmount > 0) ('EMD', CurrencyUtils.formatCompact(t.emdAmount)),
+            if (t.submissionDeadline != null) ('Submit by', _date(t.submissionDeadline)),
+          ],
+        ),
       );
 }

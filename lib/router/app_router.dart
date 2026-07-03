@@ -28,6 +28,7 @@ import '../features/purchases/screens/purchase_create_screen.dart';
 import '../features/customers/screens/customer_list_screen.dart';
 import '../features/customers/screens/customer_form_screen.dart';
 import '../data/models/customer_model.dart';
+import '../features/dispatch/screens/dispatch_queue_screen.dart';
 import '../features/finance/screens/finance_hub_screen.dart';
 import '../features/finance/screens/gst_screen.dart';
 import '../features/finance/screens/payables_screen.dart';
@@ -60,6 +61,8 @@ import '../features/site_logistics/screens/delivery_form_screen.dart';
 import '../features/correspondence/screens/letters_screen.dart';
 import '../features/correspondence/screens/letter_detail_screen.dart';
 import '../features/erp/screens/projects_screen.dart';
+import '../features/erp/screens/project_detail_screen.dart';
+import '../features/erp/screens/tender_detail_screen.dart';
 import '../features/erp/screens/machinery_screen.dart';
 import '../features/erp/screens/machinery_home_screen.dart';
 import '../features/erp/screens/machine_detail_screen.dart';
@@ -136,6 +139,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/customers', builder: (c, s) => const CustomerListScreen()),
             GoRoute(path: '/customers/new', builder: (c, s) => const CustomerFormScreen()),
             GoRoute(path: '/customers/:id/edit', builder: (c, s) => CustomerFormScreen(editCustomer: s.extra as Customer?)),
+            // ─── Dispatch persona ───
+            GoRoute(path: '/dispatch', builder: (c, s) => const DispatchQueueScreen()),
             // ─── Shared Back-Office Spine (finance persona) ───
             GoRoute(path: '/finance', builder: (c, s) => const FinanceHubScreen()),
             GoRoute(path: '/finance/gst', builder: (c, s) => const GstScreen()),
@@ -191,6 +196,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/alerts', builder: (c, s) => const AlertsScreen()),
             GoRoute(path: '/approvals', builder: (c, s) => const ApprovalsScreen()),
             GoRoute(path: '/projects', builder: (c, s) => const ProjectsScreen()),
+            GoRoute(path: '/projects/:id', builder: (c, s) => ProjectDetailScreen(projectId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/machinery', builder: (c, s) => const MachineryScreen()),
             // Machinery field persona (operator / site_admin).
             GoRoute(path: '/machinery/home', builder: (c, s) => const MachineryHomeScreen()),
@@ -198,6 +204,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/machinery/:id/log', builder: (c, s) => MachineLogEntryScreen(machineId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/machinery/:id/breakdown', builder: (c, s) => MachineBreakdownScreen(machineId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/tenders', builder: (c, s) => const TendersScreen()),
+            GoRoute(path: '/tenders/:id', builder: (c, s) => TenderDetailScreen(tenderId: int.parse(s.pathParameters['id']!))),
             GoRoute(
               path: '/correspondence',
               builder: (c, s) => LettersScreen(initialScope: s.uri.queryParameters['scope']),

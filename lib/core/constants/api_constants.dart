@@ -183,6 +183,10 @@ class ApiConstants {
   static String letterStatus(String id) => '/api/correspondence/letters/$id/status';
   static String letterApprove(String id) => '/api/correspondence/letters/$id/approve';
 
+  // ─── Dispatch (dispatch persona) ───
+  static const String dispatch = '/api/dispatch';
+  static String dispatchDelivered(String id) => '/api/dispatch/$id/delivered';
+
   // ─── Shared Back-Office Spine (finance persona: admin/manager/accounts/accountant) ───
   static const String gstSummary = '/api/gst/summary';
   static const String vendorOutstanding = '/api/vendor-reports/outstanding';

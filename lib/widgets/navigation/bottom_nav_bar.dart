@@ -28,6 +28,8 @@ class AppBottomNavBar extends ConsumerWidget {
   // Shared back-office ("spine") finance persona + employee ESS tabs.
   static const _finance = _NavTab(label: 'Finance', icon: Icons.account_balance_outlined, activeIcon: Icons.account_balance, route: '/finance');
   static const _ess = _NavTab(label: 'My ESS', icon: Icons.badge_outlined, activeIcon: Icons.badge, route: '/ess');
+  // Dispatch persona tab.
+  static const _dispatch = _NavTab(label: 'Dispatch', icon: Icons.local_shipping_outlined, activeIcon: Icons.local_shipping, route: '/dispatch');
   // Service & Warranty persona tabs.
   static const _techHome = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/service/home');
   static const _myTickets = _NavTab(label: 'My Tickets', icon: Icons.build_circle_outlined, activeIcon: Icons.build_circle, route: '/service/tickets');
@@ -54,6 +56,15 @@ class AppBottomNavBar extends ConsumerWidget {
     // Employee persona: ESS self-service only (auth-only — the employee role has no modules).
     if (user?.isEmployee == true) {
       return <_NavTab>[_ess, _profile];
+    }
+
+    // Dispatch persona: their queue + orders context, no financial tabs.
+    if (user?.isDispatch == true && user?.hasModule('dispatch') == true) {
+      final t = <_NavTab>[_dispatch];
+      if (user?.hasModule('orders') == true) t.add(_orders);
+      if (user?.hasModule('alerts') == true) t.add(_alerts);
+      t.add(_profile);
+      return t;
     }
 
     final tabs = <_NavTab>[_home];

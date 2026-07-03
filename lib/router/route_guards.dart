@@ -14,6 +14,7 @@ bool isPublicRoute(String location) {
 
 String? requiredModuleForLocation(String location) {
   if (location.startsWith('/orders')) return 'orders';
+  if (location.startsWith('/dispatch')) return 'dispatch';
   if (location.startsWith('/customers')) return 'customers';
   if (location.startsWith('/invoices')) return 'invoices';
   // ─── Shared Back-Office Spine — module-gate each surface (deep links too) ───
@@ -63,6 +64,10 @@ String postLoginHome(AuthUser? user) {
   // Employees land on their ESS self-service home (auth-only — the employee role has no modules).
   if (user?.isEmployee == true) {
     return '/ess';
+  }
+  // Dispatch staff land on their queue.
+  if (user?.isDispatch == true && user?.hasModule('dispatch') == true) {
+    return '/dispatch';
   }
   return '/dashboard';
 }
