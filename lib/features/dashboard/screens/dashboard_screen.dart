@@ -1003,6 +1003,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Payments moved off the ERP bottom nav — keep it reachable here.
       if (has('payments'))
         (Icons.payments_outlined, 'Payments', const Color(0xFF059669), () => context.go('/payments')),
+      // Shared back-office spine — one tap to the Finance hub (GST / payables / GL / expenses / payroll).
+      if (user?.hasSpine == true)
+        (Icons.account_balance_outlined, 'Finance', const Color(0xFF6366F1), () => context.push('/finance')),
+      if (has('customers'))
+        (Icons.people_alt_outlined, 'Customers', const Color(0xFF1D4ED8), () => context.push('/customers')),
       (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/approvals')),
       if (has('invoices'))
         (Icons.description_outlined, 'Invoices', const Color(0xFF6366F1), () => context.go('/invoices')),

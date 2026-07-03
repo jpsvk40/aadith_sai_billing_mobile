@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/customer_model.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/customer_list_provider.dart';
 
 class CustomerListScreen extends ConsumerStatefulWidget {
@@ -46,10 +48,20 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(customerListProvider);
     final visible = _filtered(state);
+    final user = ref.watch(authProvider).user;
+    // Customers CRUD owners: admin/manager, sales_rep, estimator. Others are view-only.
+    final canEdit = user?.isAdmin == true || user?.isSalesRep == true || user?.effectiveRole == 'estimator';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Customers')),
+      floatingActionButton: canEdit
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/customers/new'),
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('New'),
+            )
+          : null,
       body: state.isLoading && state.customers.isEmpty
           ? const LoadingIndicator()
           : state.error != null && state.customers.isEmpty
@@ -61,7 +73,11 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     itemCount: visible.length + 1,
                     itemBuilder: (ctx, i) {
                       if (i == 0) return _searchHeader(state, visible.length);
-                      return _customerCard(visible[i - 1]);
+                      final c = visible[i - 1];
+                      final card = _customerCard(c);
+                      return canEdit
+                          ? InkWell(borderRadius: BorderRadius.circular(14), onTap: () => context.push('/customers/${c.id}/edit', extra: c), child: card)
+                          : card;
                     },
                   ),
                 ),

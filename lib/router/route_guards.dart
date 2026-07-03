@@ -14,7 +14,17 @@ bool isPublicRoute(String location) {
 
 String? requiredModuleForLocation(String location) {
   if (location.startsWith('/orders')) return 'orders';
+  if (location.startsWith('/customers')) return 'customers';
   if (location.startsWith('/invoices')) return 'invoices';
+  // ─── Shared Back-Office Spine — module-gate each surface (deep links too) ───
+  if (location.startsWith('/finance/gst')) return 'gst';
+  if (location.startsWith('/finance/payables')) return 'vendor_purchases';
+  if (location.startsWith('/finance/inventory')) return 'inventory';
+  if (location.startsWith('/finance/expenses')) return 'finance_accounts';
+  if (location.startsWith('/finance/gl')) return 'finance_gl';
+  if (location.startsWith('/finance/payroll')) return 'payroll';
+  // /ess is auth-only (backend self-scopes via Employee.userId — no module gate exists).
+  // bare /finance hub is self-filtering (shows only entitled tiles) — no hard gate.
   if (location.startsWith('/payments')) return 'payments';
   if (location.startsWith('/collections')) return 'collections';
   if (location.startsWith('/service')) return 'warranty_service'; // Service & Warranty
@@ -49,6 +59,10 @@ String postLoginHome(AuthUser? user) {
   // Machine operators land on their "My Machines" home.
   if (user?.isOperator == true && user?.hasModule('machinery') == true) {
     return '/machinery/home';
+  }
+  // Employees land on their ESS self-service home (auth-only — the employee role has no modules).
+  if (user?.isEmployee == true) {
+    return '/ess';
   }
   return '/dashboard';
 }

@@ -26,6 +26,18 @@ import '../features/payments/screens/record_payment_screen.dart';
 import '../features/purchases/screens/purchase_list_screen.dart';
 import '../features/purchases/screens/purchase_create_screen.dart';
 import '../features/customers/screens/customer_list_screen.dart';
+import '../features/customers/screens/customer_form_screen.dart';
+import '../data/models/customer_model.dart';
+import '../features/finance/screens/finance_hub_screen.dart';
+import '../features/finance/screens/gst_screen.dart';
+import '../features/finance/screens/payables_screen.dart';
+import '../features/finance/screens/expenses_screen.dart';
+import '../features/finance/screens/expense_entry_screen.dart';
+import '../features/finance/screens/gl_hub_screen.dart';
+import '../features/finance/screens/gl_statement_screen.dart';
+import '../features/finance/screens/payroll_screen.dart';
+import '../features/finance/screens/ess_screen.dart';
+import '../features/finance/finance_reports.dart';
 import '../features/assistant/screens/ask_business_screen.dart';
 import '../features/service/screens/my_tickets_screen.dart';
 import '../features/service/screens/ticket_detail_screen.dart';
@@ -122,6 +134,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/site-logistics/survey', builder: (c, s) => const SurveyFormScreen()),
             GoRoute(path: '/site-logistics/delivery', builder: (c, s) => const DeliveryFormScreen()),
             GoRoute(path: '/customers', builder: (c, s) => const CustomerListScreen()),
+            GoRoute(path: '/customers/new', builder: (c, s) => const CustomerFormScreen()),
+            GoRoute(path: '/customers/:id/edit', builder: (c, s) => CustomerFormScreen(editCustomer: s.extra as Customer?)),
+            // ─── Shared Back-Office Spine (finance persona) ───
+            GoRoute(path: '/finance', builder: (c, s) => const FinanceHubScreen()),
+            GoRoute(path: '/finance/gst', builder: (c, s) => const GstScreen()),
+            GoRoute(path: '/finance/payables', builder: (c, s) => const PayablesScreen()),
+            GoRoute(path: '/finance/inventory', builder: (c, s) => const ReportViewScreen(config: FinanceReports.inventoryValuation)),
+            GoRoute(path: '/finance/expenses', builder: (c, s) => const ExpensesScreen()),
+            GoRoute(path: '/finance/expenses/new', builder: (c, s) => const ExpenseEntryScreen()),
+            GoRoute(path: '/finance/gl', builder: (c, s) => const GlHubScreen()),
+            GoRoute(path: '/finance/gl/tb', builder: (c, s) => const GlStatementScreen(statement: GlStatement.trialBalance)),
+            GoRoute(path: '/finance/gl/pnl', builder: (c, s) => const GlStatementScreen(statement: GlStatement.profitLoss)),
+            GoRoute(path: '/finance/gl/bs', builder: (c, s) => const GlStatementScreen(statement: GlStatement.balanceSheet)),
+            GoRoute(path: '/finance/payroll', builder: (c, s) => const PayrollScreen()),
+            GoRoute(path: '/ess', builder: (c, s) => const EssScreen()),
             GoRoute(
               path: '/invoices',
               builder: (c, s) => InvoiceListScreen(initialStatus: s.uri.queryParameters['filter']),

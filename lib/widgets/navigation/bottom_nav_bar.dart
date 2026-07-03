@@ -25,6 +25,9 @@ class AppBottomNavBar extends ConsumerWidget {
   // Machinery field persona (operator) tabs.
   static const _machHome = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/machinery/home');
   static const _myMachines = _NavTab(label: 'Machines', icon: Icons.agriculture_outlined, activeIcon: Icons.agriculture, route: '/machinery');
+  // Shared back-office ("spine") finance persona + employee ESS tabs.
+  static const _finance = _NavTab(label: 'Finance', icon: Icons.account_balance_outlined, activeIcon: Icons.account_balance, route: '/finance');
+  static const _ess = _NavTab(label: 'My ESS', icon: Icons.badge_outlined, activeIcon: Icons.badge, route: '/ess');
   // Service & Warranty persona tabs.
   static const _techHome = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/service/home');
   static const _myTickets = _NavTab(label: 'My Tickets', icon: Icons.build_circle_outlined, activeIcon: Icons.build_circle, route: '/service/tickets');
@@ -46,6 +49,11 @@ class AppBottomNavBar extends ConsumerWidget {
       if (user?.hasModule('alerts') == true) t.add(_alerts);
       t.add(_profile);
       return t;
+    }
+
+    // Employee persona: ESS self-service only (auth-only — the employee role has no modules).
+    if (user?.isEmployee == true) {
+      return <_NavTab>[_ess, _profile];
     }
 
     final tabs = <_NavTab>[_home];
@@ -70,7 +78,12 @@ class AppBottomNavBar extends ConsumerWidget {
         // Owner / admin / manager (billing). Approvals is the owner's action surface and replaces
         // the generic Alerts tab (alerts stay reachable via the hero bell + Home exceptions).
         if (user?.hasModule('orders') == true) tabs.add(_orders);
-        if (user?.hasModule('payments') == true) tabs.add(_payments);
+        // Finance roles get the shared-spine hub tab; otherwise keep the standalone Payments tab.
+        if (user?.hasSpine == true) {
+          tabs.add(_finance);
+        } else if (user?.hasModule('payments') == true) {
+          tabs.add(_payments);
+        }
         if (user?.hasModule('warranty_service') == true) tabs.add(_service);
         tabs.add(_approvals);
       }

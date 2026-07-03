@@ -183,6 +183,27 @@ class ApiConstants {
   static String letterStatus(String id) => '/api/correspondence/letters/$id/status';
   static String letterApprove(String id) => '/api/correspondence/letters/$id/approve';
 
+  // ─── Shared Back-Office Spine (finance persona: admin/manager/accounts/accountant) ───
+  static const String gstSummary = '/api/gst/summary';
+  static const String vendorOutstanding = '/api/vendor-reports/outstanding';
+  static const String officeExpenses = '/api/office-expenses';
+  static const String officeExpenseCategories = '/api/office-expenses/categories';
+  static const String inventoryStockValuation = '/api/inventory-reports/stock-valuation';
+  static const String inventoryStockSummary = '/api/inventory-reports/stock-summary';
+  // GL (read-only on mobile)
+  static const String glAccounts = '/api/gl/accounts';
+  static const String glTrialBalance = '/api/gl/trial-balance';
+  static const String glProfitLoss = '/api/gl/profit-loss';
+  static const String glBalanceSheet = '/api/gl/balance-sheet';
+  static const String glDayBook = '/api/gl/day-book';
+  // Payroll (view / approve)
+  static const String payrollRuns = '/api/payroll/runs';
+  static const String payrollAdvances = '/api/payroll/advances';
+  // ESS (employee self-service)
+  static const String essPayslips = '/api/ess/payslips';
+  static const String essLeaveBalance = '/api/ess/leave-balance';
+  static const String essLeave = '/api/ess/leave';
+
   // Site Logistics
   static const String siteSurveys = '/api/project-sites/surveys';
   static String siteSurveySubmit(String id) => '/api/project-sites/surveys/$id/submit';
