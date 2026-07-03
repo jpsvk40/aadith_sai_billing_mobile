@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/site_logistics_model.dart';
 import '../providers/site_logistics_provider.dart';
@@ -39,20 +40,70 @@ class _SiteLogisticsScreenState extends ConsumerState<SiteLogisticsScreen> {
 
   Future<void> _confirmDelivery(SiteDelivery d) async {
     final ctrl = TextEditingController();
+    final photos = <SitePhoto>[];
+    var uploading = false;
+
+    Future<void> pickAndUpload(void Function(void Function()) setLocal) async {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (bc) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.camera_alt_outlined), title: const Text('Take Photo'), onTap: () => Navigator.pop(bc, ImageSource.camera)),
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose from Gallery'), onTap: () => Navigator.pop(bc, ImageSource.gallery)),
+        ])),
+      );
+      if (source == null) return;
+      final file = await ImagePicker().pickImage(source: source, maxWidth: 1600, imageQuality: 82);
+      if (file == null) return;
+      setLocal(() => uploading = true);
+      try {
+        final photo = await ref.read(siteLogisticsProvider.notifier).repo.uploadPhoto(file.path);
+        setLocal(() => photos.add(photo));
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo upload needs storage configured: $e'), backgroundColor: AppColors.danger));
+      } finally {
+        setLocal(() => uploading = false);
+      }
+    }
+
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Confirm ${d.deliveryNumber}'),
-        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Received by (name at site)')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirm at site')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Confirm ${d.deliveryNumber}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Received by (name at site)')),
+              const SizedBox(height: 14),
+              Row(children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+                  onPressed: uploading ? null : () => pickAndUpload(setLocal),
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: Text(uploading ? 'Uploading…' : 'Add proof photo'),
+                ),
+                const SizedBox(width: 10),
+                Text('${photos.length} photo(s)', style: const TextStyle(color: Colors.grey)),
+              ]),
+              if (photos.any((p) => p.url != null))
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: photos.where((p) => p.url != null).map((p) => ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(p.url!, width: 52, height: 52, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image)))).toList()),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: uploading ? null : () => Navigator.pop(ctx, true), child: const Text('Confirm at site')),
+          ],
+        ),
       ),
     );
     if (ok == true) {
       try {
-        await ref.read(siteLogisticsProvider.notifier).confirmDelivery(d.id, {'receivedBy': ctrl.text.trim()});
+        await ref.read(siteLogisticsProvider.notifier).confirmDelivery(d.id, {
+          'receivedBy': ctrl.text.trim(),
+          if (photos.isNotEmpty) 'photos': photos.map((p) => p.toJson()).toList(),
+        });
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery confirmed.')));
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: AppColors.danger));
@@ -70,7 +121,13 @@ class _SiteLogisticsScreenState extends ConsumerState<SiteLogisticsScreen> {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           title: const Text('Site Logistics'),
-          bottom: const TabBar(tabs: [Tab(text: 'Surveys'), Tab(text: 'Deliveries')]),
+          bottom: const TabBar(
+            labelColor: AppColors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: AppColors.white,
+            labelStyle: TextStyle(fontWeight: FontWeight.w700),
+            tabs: [Tab(text: 'Surveys'), Tab(text: 'Deliveries')],
+          ),
         ),
         floatingActionButton: FloatingActionButton.extended(onPressed: _newEntry, icon: const Icon(Icons.add), label: const Text('New')),
         body: Column(

@@ -105,7 +105,12 @@ class _SurveyFormScreenState extends ConsumerState<SurveyFormScreen> {
         TextButton.icon(onPressed: () => setState(() => _rows.add(_ItemRow())), icon: const Icon(Icons.add), label: const Text('Add opening')),
         const Divider(height: 24),
         Row(children: [
-          OutlinedButton.icon(onPressed: _uploading ? null : _addPhoto, icon: const Icon(Icons.add_a_photo_outlined), label: Text(_uploading ? 'Uploading…' : 'Add photo')),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+            onPressed: _uploading ? null : _addPhoto,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: Text(_uploading ? 'Uploading…' : 'Add photo'),
+          ),
           const SizedBox(width: 12),
           Text('${_photos.length} photo(s)', style: const TextStyle(color: Colors.grey)),
         ]),

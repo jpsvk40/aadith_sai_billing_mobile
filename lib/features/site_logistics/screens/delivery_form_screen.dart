@@ -109,7 +109,12 @@ class _DeliveryFormScreenState extends ConsumerState<DeliveryFormScreen> {
         TextButton.icon(onPressed: () => setState(() => _rows.add(_DItem())), icon: const Icon(Icons.add), label: const Text('Add item')),
         const Divider(height: 24),
         Row(children: [
-          OutlinedButton.icon(onPressed: _uploading ? null : _addPhoto, icon: const Icon(Icons.add_a_photo_outlined), label: Text(_uploading ? 'Uploading…' : 'Add proof photo')),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+            onPressed: _uploading ? null : _addPhoto,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: Text(_uploading ? 'Uploading…' : 'Add proof photo'),
+          ),
           const SizedBox(width: 12),
           Text('${_photos.length} photo(s)', style: const TextStyle(color: Colors.grey)),
         ]),
