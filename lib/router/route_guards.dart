@@ -19,6 +19,11 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/collections')) return 'collections';
   if (location.startsWith('/service')) return 'warranty_service'; // Service & Warranty
   if (location.startsWith('/site-logistics')) return 'projects'; // ERP-only (Project & Contract)
+  // ERP tabs — module-gate deep links too, not just the tab bar.
+  if (location.startsWith('/projects')) return 'projects';
+  if (location.startsWith('/machinery')) return 'machinery';
+  if (location.startsWith('/tenders')) return 'tender';
+  if (location.startsWith('/correspondence')) return 'correspondence';
   if (location.startsWith('/commissions')) return 'reports';
   if (location.startsWith('/alerts')) return 'alerts';
   if (location.startsWith('/dashboard')) return null;
@@ -37,9 +42,13 @@ bool canAccessLocation(AuthUser? user, String location) {
 }
 
 String postLoginHome(AuthUser? user) {
-  // Technicians live in their ticket queue; everyone else lands on the role-aware Home.
+  // Technicians land on their "My Day" home; everyone else on the role-aware Home.
   if (user?.isTechnician == true && user?.hasModule('warranty_service') == true) {
-    return '/service/tickets';
+    return '/service/home';
+  }
+  // Machine operators land on their "My Machines" home.
+  if (user?.isOperator == true && user?.hasModule('machinery') == true) {
+    return '/machinery/home';
   }
   return '/dashboard';
 }

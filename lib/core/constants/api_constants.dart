@@ -16,6 +16,18 @@ class ApiConstants {
     }
   }
 
+  /// Public web-portal origin — used to build customer-facing links (e.g. the
+  /// `/track/{token}` repair-tracking page, which lives on the web app, not the API).
+  static String get webBaseUrl {
+    const fromDefine = String.fromEnvironment('WEB_BASE_URL');
+    if (fromDefine.isNotEmpty) return fromDefine;
+    try {
+      final envUrl = dotenv.maybeGet('WEB_BASE_URL');
+      if (envUrl != null && envUrl.isNotEmpty) return envUrl;
+    } catch (_) {}
+    return 'https://www.aadithsaibillingcloud.com';
+  }
+
   // Auth
   static const String login = '/api/auth/login';
   static const String me = '/api/auth/me';
@@ -109,6 +121,17 @@ class ApiConstants {
   static const String machinery = '/api/machinery';
   static const String tenders = '/api/tenders';
 
+  // ─── Machinery field persona (operator / site_admin) ───
+  static String machineDetail(String id) => '/api/machinery/$id';
+  static String machineLogs(String id) => '/api/machinery/$id/logs';
+  static String machineLogUpdate(String logId) => '/api/machinery/logs/$logId';
+  static String machineJobs(String id) => '/api/machinery/$id/jobs';
+  static String machineJobUpdate(String jobId) => '/api/machinery/jobs/$jobId';
+  static String machineJobApprove(String jobId) => '/api/machinery/jobs/$jobId/approve';
+  static const String machineryAiDiagnose = '/api/machinery/ai-diagnose';
+  static const String machineryTransfers = '/api/machinery/transfers';
+  static String machineryTransferReceive(String id) => '/api/machinery/transfers/$id/receive';
+
   // ─── Service & Warranty (warranty_service module) ───
   // Tickets
   static const String serviceTickets = '/api/service-tickets';
@@ -122,6 +145,8 @@ class ApiConstants {
   static String serviceTicketEstimateApprove(String id) => '/api/service-tickets/$id/estimate/approve';
   static String serviceTicketEstimateReject(String id) => '/api/service-tickets/$id/estimate/reject';
   static String serviceTicketJobSheet(String id) => '/api/service-tickets/$id/job-sheet';
+  static String serviceTicketReport(String id) => '/api/service-tickets/$id/report';
+  static String serviceTicketShare(String id) => '/api/service-tickets/$id/share';
   static String serviceTicketInvoice(String id) => '/api/service-tickets/$id/invoice';
   static String serviceTicketAttachments(String id) => '/api/service-tickets/$id/attachments';
   // Items / warranty

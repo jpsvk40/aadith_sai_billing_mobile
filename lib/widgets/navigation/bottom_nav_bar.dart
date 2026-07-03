@@ -22,15 +22,27 @@ class AppBottomNavBar extends ConsumerWidget {
   static const _tenders = _NavTab(label: 'Tenders', icon: Icons.gavel_outlined, activeIcon: Icons.gavel, route: '/tenders');
   static const _machinery = _NavTab(label: 'Machinery', icon: Icons.agriculture_outlined, activeIcon: Icons.agriculture, route: '/machinery');
   static const _letters = _NavTab(label: 'Letters', icon: Icons.mail_outline, activeIcon: Icons.mail, route: '/correspondence');
+  // Machinery field persona (operator) tabs.
+  static const _machHome = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/machinery/home');
+  static const _myMachines = _NavTab(label: 'Machines', icon: Icons.agriculture_outlined, activeIcon: Icons.agriculture, route: '/machinery');
   // Service & Warranty persona tabs.
+  static const _techHome = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/service/home');
   static const _myTickets = _NavTab(label: 'My Tickets', icon: Icons.build_circle_outlined, activeIcon: Icons.build_circle, route: '/service/tickets');
   static const _today = _NavTab(label: 'Today', icon: Icons.event_outlined, activeIcon: Icons.event, route: '/service/today');
   static const _service = _NavTab(label: 'Service', icon: Icons.handyman_outlined, activeIcon: Icons.handyman, route: '/service/dashboard');
 
   List<_NavTab> _getTabsForUser(dynamic user) {
-    // Technician persona: their queue + AMC visits, no financial tabs.
+    // Technician persona: My Day home + their queue + AMC visits, no financial tabs.
     if (user?.isTechnician == true && user?.hasModule('warranty_service') == true) {
-      final t = <_NavTab>[_myTickets, _today];
+      final t = <_NavTab>[_techHome, _myTickets, _today];
+      if (user?.hasModule('alerts') == true) t.add(_alerts);
+      t.add(_profile);
+      return t;
+    }
+
+    // Machine-operator persona: My Machines home + their fleet, no financial tabs.
+    if (user?.isOperator == true && user?.hasModule('machinery') == true) {
+      final t = <_NavTab>[_machHome, _myMachines];
       if (user?.hasModule('alerts') == true) t.add(_alerts);
       t.add(_profile);
       return t;

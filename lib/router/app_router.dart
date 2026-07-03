@@ -32,6 +32,7 @@ import '../features/service/screens/ticket_detail_screen.dart';
 import '../features/service/screens/warranty_lookup_screen.dart';
 import '../features/service/screens/today_visits_screen.dart';
 import '../features/service/screens/service_dashboard_screen.dart';
+import '../features/service/screens/service_home_screen.dart';
 import '../features/service/screens/create_ticket_screen.dart';
 import '../features/service/screens/service_items_screen.dart';
 import '../features/service/screens/service_contracts_screen.dart';
@@ -48,6 +49,10 @@ import '../features/correspondence/screens/letters_screen.dart';
 import '../features/correspondence/screens/letter_detail_screen.dart';
 import '../features/erp/screens/projects_screen.dart';
 import '../features/erp/screens/machinery_screen.dart';
+import '../features/erp/screens/machinery_home_screen.dart';
+import '../features/erp/screens/machine_detail_screen.dart';
+import '../features/erp/screens/machine_log_entry_screen.dart';
+import '../features/erp/screens/machine_breakdown_screen.dart';
 import '../features/erp/screens/tenders_screen.dart';
 import '../features/settings/screens/push_settings_screen.dart';
 import 'route_guards.dart';
@@ -160,6 +165,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/approvals', builder: (c, s) => const ApprovalsScreen()),
             GoRoute(path: '/projects', builder: (c, s) => const ProjectsScreen()),
             GoRoute(path: '/machinery', builder: (c, s) => const MachineryScreen()),
+            // Machinery field persona (operator / site_admin).
+            GoRoute(path: '/machinery/home', builder: (c, s) => const MachineryHomeScreen()),
+            GoRoute(path: '/machinery/:id', builder: (c, s) => MachineDetailScreen(machineId: int.parse(s.pathParameters['id']!))),
+            GoRoute(path: '/machinery/:id/log', builder: (c, s) => MachineLogEntryScreen(machineId: int.parse(s.pathParameters['id']!))),
+            GoRoute(path: '/machinery/:id/breakdown', builder: (c, s) => MachineBreakdownScreen(machineId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/tenders', builder: (c, s) => const TendersScreen()),
             GoRoute(
               path: '/correspondence',
@@ -173,6 +183,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/reports/view', builder: (c, s) => ReportViewScreen(config: s.extra as ReportConfig)),
             GoRoute(path: '/ask-business', builder: (c, s) => const AskBusinessScreen()),
             // ─── Service & Warranty ───
+            GoRoute(path: '/service/home', builder: (c, s) => const ServiceHomeScreen()),
             GoRoute(path: '/service/dashboard', builder: (c, s) => const ServiceDashboardScreen()),
             GoRoute(path: '/service/tickets', builder: (c, s) => const TechnicianTicketsScreen()),
             GoRoute(path: '/service/tickets/create', builder: (c, s) => const CreateTicketScreen()),

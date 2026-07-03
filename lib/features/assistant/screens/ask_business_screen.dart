@@ -67,12 +67,32 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   BusinessBrief? _brief; // proactive digest shown on open (no LLM)
   String _briefState = 'idle'; // idle | loading | done | error
 
-  static const _suggestions = [
-    "Today's sales?",
-    'Who owes me the most money?',
-    'How much did we collect this month?',
-    'How much do we owe vendors?',
-  ];
+  /// Starter chips — technicians get field-work questions, everyone else the owner set.
+  List<String> get _suggestions {
+    final user = ref.read(authProvider).user;
+    if (user?.isTechnician == true) {
+      return const [
+        'What tickets are assigned to me?',
+        'Any overdue repairs?',
+        'Tickets awaiting parts?',
+        'Warranties expiring this month?',
+      ];
+    }
+    if (user?.isOperator == true) {
+      return const [
+        'What maintenance is due on my machines?',
+        'Which documents expire soon?',
+        'How many hours did my machine run this week?',
+        'Any open breakdowns?',
+      ];
+    }
+    return const [
+      "Today's sales?",
+      'Who owes me the most money?',
+      'How much did we collect this month?',
+      'How much do we owe vendors?',
+    ];
+  }
 
   @override
   void initState() {

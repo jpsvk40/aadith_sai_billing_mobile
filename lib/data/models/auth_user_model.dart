@@ -60,6 +60,8 @@ class AuthUser {
   bool get isAccounts => effectiveRole == 'accounts';
   bool get isDispatch => effectiveRole == 'dispatch';
   bool get isTechnician => effectiveRole == 'technician';
+  bool get isOperator => effectiveRole == 'operator'; // machinery field crew (P&M)
+  bool get isSiteAdmin => effectiveRole == 'site_admin';
   bool hasModule(String module) => effectiveModules.contains(module);
   // Billing-capable roles (mirrors backend canBill: admin/manager/accounts/super_*).
   bool get canBill => isAdmin || isAccounts;

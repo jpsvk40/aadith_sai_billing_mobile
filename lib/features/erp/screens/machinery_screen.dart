@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/erp_list_models.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/erp_providers.dart';
+import '../providers/machinery_providers.dart';
 import 'erp_common.dart';
+import 'machine_transfers_section.dart';
 
 const _accent = Color(0xFF7C3AED);
 
@@ -54,10 +58,21 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
             ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () async => ref.invalidate(machineryListProvider),
-                child: filtered.isEmpty
-                    ? ListView(children: const [ErpEmpty(icon: Icons.agriculture_outlined, text: 'No matching machines')])
-                    : ListView(padding: const EdgeInsets.fromLTRB(16, 6, 16, 24), children: filtered.map(_card).toList()),
+                onRefresh: () async {
+                  ref.invalidate(machineryListProvider);
+                  if (ref.read(authProvider).user?.isOperator != true) ref.invalidate(machineTransfersProvider);
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+                  children: [
+                    // Supervisors+ receive incoming machine transfers right from the fleet list.
+                    if (ref.watch(authProvider).user?.isOperator != true) const MachineTransfersSection(),
+                    if (filtered.isEmpty)
+                      const ErpEmpty(icon: Icons.agriculture_outlined, text: 'No matching machines')
+                    else
+                      ...filtered.map(_card),
+                  ],
+                ),
               ),
             ),
           ]);
@@ -66,7 +81,12 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
     );
   }
 
-  Widget _card(Machine m) => ErpCard(
+  Widget _card(Machine m) => GestureDetector(
+        onTap: () => context.push('/machinery/${m.id}'),
+        child: _cardBody(m),
+      );
+
+  Widget _cardBody(Machine m) => ErpCard(
         icon: Icons.agriculture_outlined,
         color: _accent,
         title: m.name,
