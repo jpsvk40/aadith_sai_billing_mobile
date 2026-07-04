@@ -14,6 +14,8 @@ import '../features/reports/screens/report_view_screen.dart';
 import '../features/collections/screens/collection_detail_screen.dart';
 import '../features/collections/screens/collection_list_screen.dart';
 import '../features/collections/screens/collection_payment_screen.dart';
+import '../features/collections/screens/customer_statement_screen.dart';
+import '../data/models/collection_model.dart';
 import '../features/commissions/screens/commission_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/invoices/screens/invoice_detail_screen.dart';
@@ -180,6 +182,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/collections',
               builder: (c, s) => const CollectionListScreen(),
+            ),
+            GoRoute(
+              path: '/collections/statement/:id',
+              builder: (c, s) {
+                final e = s.extra as Map<String, dynamic>?;
+                return CustomerStatementScreen(
+                  customerId: s.pathParameters['id']!,
+                  customerName: (e?['customerName'] as String?) ?? 'Customer',
+                  customerNameTa: e?['customerNameTa'] as String?,
+                  city: e?['city'] as String?,
+                  phone: e?['phone'] as String?,
+                  items: (e?['items'] as List?)?.cast<Collection>() ?? const [],
+                );
+              },
             ),
             GoRoute(
               path: '/collections/:id',

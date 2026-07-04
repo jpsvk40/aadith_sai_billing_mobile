@@ -36,6 +36,23 @@ class ApiClient {
     }
   }
 
+  /// Fetch a binary response (e.g. a server-rendered PDF) as raw bytes.
+  Future<List<int>> getBytes(String path, {Map<String, dynamic>? queryParams, Duration? timeout}) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        path,
+        queryParameters: queryParams,
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: timeout ?? const Duration(seconds: 60),
+        ),
+      );
+      return response.data ?? const <int>[];
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<dynamic> post(String path, {dynamic data, Duration? timeout}) async {
     try {
       final response = await _dio.post(

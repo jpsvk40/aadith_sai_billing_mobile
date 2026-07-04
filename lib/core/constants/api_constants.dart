@@ -87,6 +87,8 @@ class ApiConstants {
   // Collections
   static const String collections = '/api/collections';
   static const String collectionReps = '/api/collections/collection-reps';
+  static String collectionStatementPdf(String customerId) => '/api/collections/customer-statement/$customerId/pdf';
+  static String collectionStatementWhatsapp(String customerId) => '/api/collections/customer-statement/$customerId/whatsapp';
   static String collectionDetail(String id) => '/api/collections/$id';
   static String collectionPayment(String id) => '/api/collections/$id/payment';
   static String collectionCorrection(String id) =>

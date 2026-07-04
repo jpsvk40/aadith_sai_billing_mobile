@@ -138,6 +138,98 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
     }
   }
 
+  // Distinct customers in the loaded book → pick one for a PDF / WhatsApp statement.
+  void _openStatementPicker() {
+    final map = <String, _CustStmt>{};
+    for (final c in _all) {
+      final id = c.customerId;
+      if (id == null || id.isEmpty) continue;
+      final e = map.putIfAbsent(id, () => _CustStmt(id, c.customerName ?? 'Customer', c.city, c.customerPhone));
+      e.items.add(c);
+      e.balance += c.balanceAmount;
+    }
+    final customers = map.values.toList()..sort((a, b) => b.balance.compareTo(a.balance));
+    String q = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final filtered = q.isEmpty
+              ? customers
+              : customers.where((e) => e.name.toLowerCase().contains(q) || (e.city ?? '').toLowerCase().contains(q)).toList();
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.75,
+            maxChildSize: 0.92,
+            builder: (ctx, scrollCtrl) => Column(children: [
+              const SizedBox(height: 10),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                child: Row(children: [
+                  const Icon(Icons.description_outlined, color: _teal, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Pick a customer for a statement', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+                  Text('${customers.length}', style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  autofocus: false,
+                  onChanged: (v) => setSheet(() => q = v.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search customer or city…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, i) {
+                    final e = filtered[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _teal.withValues(alpha: 0.12),
+                        child: Text(e.name.isNotEmpty ? e.name[0].toUpperCase() : '?', style: const TextStyle(color: _teal, fontWeight: FontWeight.w800)),
+                      ),
+                      title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      subtitle: Text('${e.items.length} invoice${e.items.length == 1 ? '' : 's'}${(e.city ?? '').isNotEmpty ? ' · ${e.city}' : ''}', style: const TextStyle(fontSize: 11.5)),
+                      trailing: Text(CurrencyUtils.format(e.balance), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: e.balance > 0 ? AppColors.danger : AppColors.success)),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        context.push('/collections/statement/${e.id}', extra: {
+                          'customerName': e.name,
+                          'city': e.city,
+                          'phone': e.phone,
+                          'items': e.items,
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = _visible;
@@ -145,7 +237,16 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Collections')),
+      appBar: AppBar(
+        title: const Text('Collections'),
+        actions: [
+          IconButton(
+            tooltip: 'Customer statement (PDF / WhatsApp)',
+            icon: const Icon(Icons.description_outlined),
+            onPressed: _all.isEmpty ? null : _openStatementPicker,
+          ),
+        ],
+      ),
       body: _loading
           ? const LoadingIndicator()
           : _error != null
@@ -417,4 +518,15 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: color ?? AppColors.textPrimary)),
         ]),
       );
+}
+
+/// One customer's aggregated collection line for the statement picker.
+class _CustStmt {
+  _CustStmt(this.id, this.name, this.city, this.phone);
+  final String id;
+  final String name;
+  final String? city;
+  final String? phone;
+  final List<Collection> items = [];
+  double balance = 0;
 }
