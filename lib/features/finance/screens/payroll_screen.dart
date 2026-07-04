@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -105,41 +106,47 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
                       final t = _totals(r);
                       final status = (r['status'] ?? '').toString();
                       final sc = _statusColor(status);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border, width: 0.5),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+                      return InkWell(
+                        onTap: () => context.push('/finance/payroll/run/${r['id']}'),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border, width: 0.5),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [
+                              Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(color: _green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(11)),
+                                child: const Icon(Icons.groups_outlined, color: _green, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(r['periodLabel']?.toString() ?? 'Run #${r['id']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                                const SizedBox(height: 2),
+                                Text('${r['runType'] ?? ''} · ${t.$3} employee${t.$3 == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                              ])),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(color: sc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
+                                child: Text(status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: sc)),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+                            ]),
+                            const SizedBox(height: 10),
+                            Row(children: [
+                              _metric('Gross', CurrencyUtils.format(t.$2)),
+                              _metric('Net payout', CurrencyUtils.format(t.$1)),
+                              _metric('Deductions', CurrencyUtils.format(t.$2 - t.$1)),
+                            ]),
+                          ]),
                         ),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Container(
-                              width: 40, height: 40,
-                              decoration: BoxDecoration(color: _green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(11)),
-                              child: const Icon(Icons.groups_outlined, color: _green, size: 20),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(r['periodLabel']?.toString() ?? 'Run #${r['id']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                              const SizedBox(height: 2),
-                              Text('${r['runType'] ?? ''} · ${t.$3} employee${t.$3 == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
-                            ])),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(color: sc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
-                              child: Text(status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: sc)),
-                            ),
-                          ]),
-                          const SizedBox(height: 10),
-                          Row(children: [
-                            _metric('Gross', CurrencyUtils.format(t.$2)),
-                            _metric('Net payout', CurrencyUtils.format(t.$1)),
-                            _metric('Deductions', CurrencyUtils.format(t.$2 - t.$1)),
-                          ]),
-                        ]),
                       );
                     }),
                   ]),

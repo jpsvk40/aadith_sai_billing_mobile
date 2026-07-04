@@ -39,6 +39,7 @@ import '../features/finance/screens/advance_floats_screen.dart';
 import '../features/finance/screens/gl_hub_screen.dart';
 import '../features/finance/screens/gl_statement_screen.dart';
 import '../features/finance/screens/payroll_screen.dart';
+import '../features/finance/screens/payroll_run_detail_screen.dart';
 import '../features/finance/screens/ess_screen.dart';
 import '../features/assistant/screens/ask_business_screen.dart';
 import '../features/service/screens/my_tickets_screen.dart';
@@ -155,6 +156,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/finance/gl/pnl', builder: (c, s) => const GlStatementScreen(statement: GlStatement.profitLoss)),
             GoRoute(path: '/finance/gl/bs', builder: (c, s) => const GlStatementScreen(statement: GlStatement.balanceSheet)),
             GoRoute(path: '/finance/payroll', builder: (c, s) => const PayrollScreen()),
+            GoRoute(path: '/finance/payroll/run/:id', builder: (c, s) => PayrollRunDetailScreen(runId: s.pathParameters['id']!)),
             GoRoute(path: '/ess', builder: (c, s) => const EssScreen()),
             GoRoute(
               path: '/invoices',
