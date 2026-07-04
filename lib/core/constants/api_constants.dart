@@ -199,6 +199,12 @@ class ApiConstants {
   static String advanceFloatClose(String id) => '/api/advance-floats/$id/close';
   static const String inventoryStockValuation = '/api/inventory-reports/stock-valuation';
   static const String inventoryStockSummary = '/api/inventory-reports/stock-summary';
+  // Inventory depth (read + transfer receive)
+  static const String inventoryItems = '/api/inventory-items';
+  static const String inventoryLocations = '/api/inventory-locations';
+  static const String inventoryTransfers = '/api/inventory-transfers';
+  static String inventoryTransferReceive(String id) => '/api/inventory-transfers/$id/receive';
+  static const String inventoryTransactions = '/api/inventory-transactions';
   // GL (read-only on mobile)
   static const String glAccounts = '/api/gl/accounts';
   static const String glTrialBalance = '/api/gl/trial-balance';

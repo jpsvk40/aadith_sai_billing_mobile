@@ -37,6 +37,11 @@ import '../features/finance/screens/payables_screen.dart';
 import '../features/finance/screens/expenses_screen.dart';
 import '../features/finance/screens/expense_entry_screen.dart';
 import '../features/finance/screens/inventory_report_screen.dart';
+import '../features/finance/screens/inventory_hub_screen.dart';
+import '../features/finance/screens/inventory_items_screen.dart';
+import '../features/finance/screens/inventory_locations_screen.dart';
+import '../features/finance/screens/inventory_transfers_screen.dart';
+import '../features/finance/screens/inventory_movements_screen.dart';
 import '../features/finance/screens/advance_floats_screen.dart';
 import '../features/finance/screens/gl_hub_screen.dart';
 import '../features/finance/screens/gl_statement_screen.dart';
@@ -149,7 +154,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/finance', builder: (c, s) => const FinanceHubScreen()),
             GoRoute(path: '/finance/gst', builder: (c, s) => const GstScreen()),
             GoRoute(path: '/finance/payables', builder: (c, s) => const PayablesScreen()),
-            GoRoute(path: '/finance/inventory', builder: (c, s) => const InventoryReportScreen()),
+            GoRoute(path: '/finance/inventory', builder: (c, s) => const InventoryHubScreen()),
+            GoRoute(path: '/finance/inventory/stock', builder: (c, s) => const InventoryReportScreen()),
+            GoRoute(path: '/finance/inventory/items', builder: (c, s) => const InventoryItemsScreen()),
+            GoRoute(path: '/finance/inventory/locations', builder: (c, s) => const InventoryLocationsScreen()),
+            GoRoute(path: '/finance/inventory/transfers', builder: (c, s) => const InventoryTransfersScreen()),
+            GoRoute(path: '/finance/inventory/movements', builder: (c, s) => const InventoryMovementsScreen()),
             GoRoute(path: '/finance/expenses', builder: (c, s) => const ExpensesScreen()),
             GoRoute(path: '/finance/expenses/new', builder: (c, s) => const ExpenseEntryScreen()),
             GoRoute(path: '/finance/advances', builder: (c, s) => const AdvanceFloatsScreen()),
