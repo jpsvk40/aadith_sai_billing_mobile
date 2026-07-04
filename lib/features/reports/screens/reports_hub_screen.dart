@@ -16,6 +16,8 @@ class ReportsHubScreen extends ConsumerWidget {
       icon: Icons.account_balance_wallet_outlined,
       color: Color(0xFFF59E0B),
       totalField: 'balanceAmount',
+      groupBy: 'billingName',
+      groupNoun: 'invoices',
       columns: [
         ReportColumn('Customer', 'billingName', primary: true),
         ReportColumn('Invoice', 'invoiceNo'),
@@ -32,6 +34,8 @@ class ReportsHubScreen extends ConsumerWidget {
       icon: Icons.schedule_outlined,
       color: Color(0xFFEF4444),
       totalField: 'balanceAmount',
+      groupBy: 'billingName',
+      groupNoun: 'invoices',
       columns: [
         ReportColumn('Customer', 'billingName', primary: true),
         ReportColumn('Invoice', 'invoiceNo'),
@@ -143,6 +147,8 @@ class ReportsHubScreen extends ConsumerWidget {
       icon: Icons.request_quote_outlined,
       color: Color(0xFFEF4444),
       totalField: 'balanceAmount',
+      groupBy: 'customerName',
+      groupNoun: 'invoices',
       columns: [
         ReportColumn('Customer', 'customerName', primary: true),
         ReportColumn('Invoice', 'invoiceNo'),

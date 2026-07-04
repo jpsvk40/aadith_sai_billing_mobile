@@ -39,6 +39,8 @@ class ReportConfig {
   final Map<String, String> queryParams; // fixed extra query params (drill-downs)
   final List<Map<String, dynamic>> staticRows; // pre-loaded rows (client-side drill) — skips fetch
   final String? drill; // 'payment' | 'transport' — makes rows tappable into a sub-report
+  final String? groupBy; // row field to collapse rows under (e.g. customer name)
+  final String groupNoun; // plural noun for the per-group count ("invoices", "rows")
 
   // Legacy fallback (used only when [columns] is empty).
   final List<String> labelKeys;
@@ -56,6 +58,8 @@ class ReportConfig {
     this.queryParams = const {},
     this.staticRows = const [],
     this.drill,
+    this.groupBy,
+    this.groupNoun = 'rows',
     this.labelKeys = const ['customerName', 'productName', 'name', 'label', 'title', 'invoiceNumber'],
     this.amountKeys = const ['balanceAmount', 'totalSales', 'salesTotal', 'netSales', 'totalAmount', 'netAmount', 'grandTotal', 'total', 'amount', 'outstanding', 'value'],
     this.subtitleKeys = const ['invoiceNumber', 'dueDate', 'orderCount', 'quantity', 'phone', 'agingBucket'],
@@ -88,6 +92,8 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   String _search = '';
   bool _busyPdf = false;
   bool _busyWa = false;
+  late bool _grouped = widget.config.groupBy != null; // grouped view on by default when supported
+  final Set<String> _expanded = {}; // expanded group keys
 
   ApiClient get _client => ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
 
@@ -184,6 +190,24 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
       }
       return r.values.any((v) => v.toString().toLowerCase().contains(q));
     }).toList();
+  }
+
+  // Rows grouped under [config.groupBy], insertion order preserved.
+  List<MapEntry<String, List<Map<String, dynamic>>>> get _groups {
+    final gb = widget.config.groupBy;
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final r in _visible) {
+      final raw = gb == null ? null : r[gb]?.toString().trim();
+      final key = (raw == null || raw.isEmpty) ? '—' : raw;
+      (map[key] ??= []).add(r);
+    }
+    return map.entries.toList();
+  }
+
+  double _groupTotal(List<Map<String, dynamic>> rows) {
+    final tc = _totalColumn;
+    if (tc == null) return 0;
+    return rows.fold<double>(0, (a, r) => a + _num(r[tc.field]));
   }
 
   double get _total {
@@ -396,10 +420,25 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     return null;
   }
 
+  bool get _groupingOn => widget.config.groupBy != null && _grouped;
+
+  // Flattened display list for the grouped view: group-header entries interleaved with
+  // the member rows of each expanded group.
+  List<dynamic> get _displayItems {
+    if (!_groupingOn) return _visible;
+    final items = <dynamic>[];
+    for (final g in _groups) {
+      items.add(g);
+      if (_expanded.contains(g.key)) items.addAll(g.value);
+    }
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cfg = widget.config;
     final visible = _visible;
+    final items = _displayItems;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -429,10 +468,12 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
                   onRefresh: _load,
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: visible.length + 1,
+                    itemCount: items.length + 1,
                     itemBuilder: (ctx, i) {
                       if (i == 0) return _header(cfg, _total, visible.length);
-                      return _row(visible[i - 1], cfg);
+                      final item = items[i - 1];
+                      if (item is MapEntry<String, List<Map<String, dynamic>>>) return _groupHeader(item, cfg);
+                      return _row(item as Map<String, dynamic>, cfg, sub: _groupingOn);
                     },
                   ),
                 ),
@@ -505,12 +546,45 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
             ]),
           ),
         ],
+        if (cfg.groupBy != null) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            InkWell(
+              onTap: () => setState(() { _grouped = !_grouped; _expanded.clear(); }),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _grouped ? cfg.color.withValues(alpha: 0.12) : AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _grouped ? cfg.color : AppColors.border),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_grouped ? Icons.check_circle : Icons.circle_outlined, size: 15, color: _grouped ? cfg.color : AppColors.textMuted),
+                  const SizedBox(width: 6),
+                  Text('Group by customer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _grouped ? cfg.color : AppColors.textSecondary)),
+                ]),
+              ),
+            ),
+            const Spacer(),
+            if (_groupingOn)
+              TextButton(
+                onPressed: () => setState(() {
+                  if (_expanded.isEmpty) { _expanded.addAll(_groups.map((g) => g.key)); } else { _expanded.clear(); }
+                }),
+                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 32), visualDensity: VisualDensity.compact),
+                child: Text(_expanded.isEmpty ? 'Expand all' : 'Collapse all', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cfg.color)),
+              ),
+          ]),
+        ],
         const SizedBox(height: 8),
         Row(children: [
-          Icon(cfg.drill != null ? Icons.touch_app_outlined : Icons.picture_as_pdf_outlined, size: 13, color: AppColors.textMuted),
+          Icon(_groupingOn ? Icons.unfold_more : (cfg.drill != null ? Icons.touch_app_outlined : Icons.picture_as_pdf_outlined), size: 13, color: AppColors.textMuted),
           const SizedBox(width: 4),
           Expanded(child: Text(
-            cfg.drill != null ? 'Tap a row to drill in · Download or WhatsApp from the top-right' : 'Download or WhatsApp this report from the top-right',
+            _groupingOn
+                ? 'Tap a customer to see their ${cfg.groupNoun} · Download or WhatsApp from the top-right'
+                : cfg.drill != null ? 'Tap a row to drill in · Download or WhatsApp from the top-right' : 'Download or WhatsApp this report from the top-right',
             style: const TextStyle(fontSize: 11, color: AppColors.textMuted))),
         ]),
         const SizedBox(height: 8),
@@ -522,7 +596,45 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
 
   bool get visibleEmpty => _visible.isEmpty && !_loading;
 
-  Widget _row(Map<String, dynamic> r, ReportConfig cfg) {
+  Widget _groupHeader(MapEntry<String, List<Map<String, dynamic>>> g, ReportConfig cfg) {
+    final tc = _totalColumn;
+    final expanded = _expanded.contains(g.key);
+    final sum = _groupTotal(g.value);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: expanded ? cfg.color.withValues(alpha: 0.5) : AppColors.border, width: expanded ? 1 : 0.5),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => expanded ? _expanded.remove(g.key) : _expanded.add(g.key)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(children: [
+            AnimatedRotation(
+              turns: expanded ? 0.25 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: const Icon(Icons.chevron_right, size: 20, color: AppColors.textSecondary),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(g.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppColors.textPrimary)),
+              const SizedBox(height: 2),
+              Text('${g.value.length} ${cfg.groupNoun}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+            ])),
+            if (tc != null) ...[
+              const SizedBox(width: 8),
+              Text(CurrencyUtils.format(sum), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: cfg.color)),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _row(Map<String, dynamic> r, ReportConfig cfg, {bool sub = false}) {
     final tappable = cfg.drill != null;
     Widget content;
 
@@ -542,11 +654,22 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
       ]);
     } else {
       final cols = cfg.columns;
-      final primary = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
-      final rest = cols.where((c) => c != primary).toList();
+      // In a grouped sub-row the customer (primary) is already shown on the group header,
+      // so headline with the row's own identifier (e.g. invoice no) and drop the primary.
+      final ReportColumn headline;
+      final List<ReportColumn> rest;
+      if (sub) {
+        final nonPrimary = cols.where((c) => !c.primary).toList();
+        headline = nonPrimary.firstWhere((c) => !c.currency && !c.numeric && !c.isDate,
+            orElse: () => nonPrimary.isNotEmpty ? nonPrimary.first : cols.first);
+        rest = cols.where((c) => c != headline && !c.primary).toList();
+      } else {
+        headline = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
+        rest = cols.where((c) => c != headline).toList();
+      }
       content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(_cell(r, primary).isEmpty ? '—' : _cell(r, primary),
+          Expanded(child: Text(_cell(r, headline).isEmpty ? '—' : _cell(r, headline),
               maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textPrimary))),
           if (tappable) const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
         ]),
@@ -565,11 +688,14 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     }
 
     final card = Container(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      margin: sub ? const EdgeInsets.fromLTRB(26, 0, 14, 6) : const EdgeInsets.fromLTRB(14, 0, 14, 8),
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: AppColors.surface, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
+        color: sub ? AppColors.background : AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: sub
+            ? Border(left: BorderSide(color: cfg.color.withValues(alpha: 0.5), width: 2))
+            : Border.all(color: AppColors.border, width: 0.5),
       ),
       child: content,
     );
