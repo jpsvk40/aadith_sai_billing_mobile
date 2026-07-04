@@ -8,10 +8,15 @@ frontend, and the mobile app._
 new **`operator`** role + **machinery field persona** ✅, and **site-logistics proof-photo capture** ✅.
 See §7 for the current "what's still left" list.
 
-> **Next up — Shared Spine (Phase 1):** the P1/P2 back-office items (customers, GST, payables, inventory,
-> expenses, GL, payroll) are common to all three verticals and owned by the finance/office roles. Strategy
-> + role/vertical grids: [`MOBILE_VERTICAL_RBAC_PLAN.md`](./MOBILE_VERTICAL_RBAC_PLAN.md). Actionable build
-> + emulator E2E plan: [`SHARED_SPINE_BUILD_PLAN.md`](./SHARED_SPINE_BUILD_PLAN.md).
+> **UPDATE 2026-07-03 (later):** **Phase 1 Shared Spine SHIPPED + E2E-verified** — Finance hub
+> (module∩role gated) with Customers CRUD, GST monthly summary, Payables (vendor-grouped), Inventory
+> valuation, Expenses list+add, GL read (TB/P&L/BS/Day book), Payroll runs; **new `employee` (ESS) persona**
+> (leave balances, apply leave, payslips). **Phase 2 SHIPPED + E2E-verified** — **dispatch persona**
+> (queue home + Mark delivered) and **construction detail screens** (project billing/progress/DPR,
+> tender key-facts + deadline countdown). Strategy + grids:
+> [`MOBILE_VERTICAL_RBAC_PLAN.md`](./MOBILE_VERTICAL_RBAC_PLAN.md); build/E2E plan:
+> [`SHARED_SPINE_BUILD_PLAN.md`](./SHARED_SPINE_BUILD_PLAN.md). Remaining next: CRM/quotations,
+> unified notification inbox, expenses approvals, construction *entry* (DPR/estimates), ho_user cockpit.
 
 ## 1. The shape of the gap
 - **Web** = full ERP: ~145 routes / ~130 pages across **24 functional areas** in 3 "worlds"
