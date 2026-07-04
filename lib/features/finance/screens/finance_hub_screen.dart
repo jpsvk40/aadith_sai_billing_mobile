@@ -18,6 +18,8 @@ class FinanceHubScreen extends ConsumerWidget {
     // (icon, title, subtitle, color, module-gate, route)
     final tiles = <(IconData, String, String, Color, String, String)>[
       (Icons.people_alt_outlined, 'Customers', 'Parties & CRUD', const Color(0xFF1D4ED8), 'customers', '/customers'),
+      (Icons.account_balance_wallet_outlined, 'Collections', 'Field collection book', const Color(0xFF0D9488), 'collections', '/collections'),
+      (Icons.percent_outlined, 'Rep Commission', 'Leaderboard & settlements', const Color(0xFF7C3AED), 'reports', '/commissions'),
       (Icons.receipt_long_outlined, 'GST', 'Liability & compliance', const Color(0xFF0891B2), 'gst', '/finance/gst'),
       (Icons.account_balance_outlined, 'Payables', 'Vendor dues & credit notes', const Color(0xFFEF4444), 'vendor_purchases', '/finance/payables'),
       (Icons.inventory_2_outlined, 'Inventory', 'Stock valuation', const Color(0xFF7C3AED), 'inventory', '/finance/inventory'),
