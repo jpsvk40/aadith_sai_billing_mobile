@@ -83,14 +83,62 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
     }
   }
 
+  /// Ask which number to send to — prefilled with the customer's, but editable so
+  /// a whitelisted test-recipient number can be used while WhatsApp is in test mode.
+  Future<String?> _promptNumber() async {
+    final ctrl = TextEditingController(text: (widget.phone ?? '').replaceAll(RegExp(r'[^\d+]'), ''));
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Send statement on WhatsApp'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Statement for ${widget.customerName}', style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.phone,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'WhatsApp number',
+                hintText: 'e.g. 9843688994',
+                prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text('In test mode, only numbers on your WhatsApp test-recipient list will receive the message.',
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final v = ctrl.text.trim();
+              if (v.isNotEmpty) Navigator.pop(ctx, v);
+            },
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _sendWhatsApp() async {
     if (_busyWa) return;
+    final number = await _promptNumber();
+    if (number == null || number.trim().isEmpty || !mounted) return;
     setState(() => _busyWa = true);
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Sending on WhatsApp…')));
+    messenger.showSnackBar(SnackBar(content: Text('Sending to $number…')));
     try {
       await _client.post(
         ApiConstants.collectionStatementWhatsapp(widget.customerId),
+        data: {'to': number.trim()},
         timeout: const Duration(seconds: 90),
       );
       messenger.hideCurrentSnackBar();
