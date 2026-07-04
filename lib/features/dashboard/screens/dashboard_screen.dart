@@ -1006,7 +1006,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Shared back-office spine — one tap to the Finance hub (GST / payables / GL / expenses / payroll).
       if (user?.hasSpine == true)
         (Icons.account_balance_outlined, 'Finance', const Color(0xFF6366F1), () => context.push('/finance')),
-      if (has('customers'))
+      // Customers lives inside the Finance hub for spine users — only surface it
+      // here for users who have the module but no Finance tab (e.g. estimator).
+      if (has('customers') && user?.hasSpine != true)
         (Icons.people_alt_outlined, 'Customers', const Color(0xFF1D4ED8), () => context.push('/customers')),
       (Icons.check_circle_outline, 'Approvals', _orange, () => context.go('/approvals')),
       if (has('invoices'))
