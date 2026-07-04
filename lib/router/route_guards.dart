@@ -22,6 +22,7 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/finance/payables')) return 'vendor_purchases';
   if (location.startsWith('/finance/inventory')) return 'inventory';
   if (location.startsWith('/finance/expenses')) return 'finance_accounts';
+  if (location.startsWith('/finance/advances')) return 'finance_accounts';
   if (location.startsWith('/finance/gl')) return 'finance_gl';
   if (location.startsWith('/finance/payroll')) return 'payroll';
   // /ess is auth-only (backend self-scopes via Employee.userId — no module gate exists).

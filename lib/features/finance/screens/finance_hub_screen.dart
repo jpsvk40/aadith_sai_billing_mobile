@@ -22,6 +22,7 @@ class FinanceHubScreen extends ConsumerWidget {
       (Icons.account_balance_outlined, 'Payables', 'Vendor dues & credit notes', const Color(0xFFEF4444), 'vendor_purchases', '/finance/payables'),
       (Icons.inventory_2_outlined, 'Inventory', 'Stock valuation', const Color(0xFF7C3AED), 'inventory', '/finance/inventory'),
       (Icons.request_quote_outlined, 'Expenses', 'Office & petty cash', const Color(0xFFD97706), 'finance_accounts', '/finance/expenses'),
+      (Icons.account_balance_wallet_outlined, 'Advances', 'Staff advance floats', const Color(0xFF7C3AED), 'finance_accounts', '/finance/advances'),
       (Icons.menu_book_outlined, 'General Ledger', 'Ledger · TB · P&L · Day book', const Color(0xFF6366F1), 'finance_gl', '/finance/gl'),
       (Icons.groups_outlined, 'Payroll', 'Runs & advances', const Color(0xFF059669), 'payroll', '/finance/payroll'),
     ].where((t) => has(t.$5)).toList();

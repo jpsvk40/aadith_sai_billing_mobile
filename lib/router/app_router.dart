@@ -34,11 +34,12 @@ import '../features/finance/screens/gst_screen.dart';
 import '../features/finance/screens/payables_screen.dart';
 import '../features/finance/screens/expenses_screen.dart';
 import '../features/finance/screens/expense_entry_screen.dart';
+import '../features/finance/screens/inventory_report_screen.dart';
+import '../features/finance/screens/advance_floats_screen.dart';
 import '../features/finance/screens/gl_hub_screen.dart';
 import '../features/finance/screens/gl_statement_screen.dart';
 import '../features/finance/screens/payroll_screen.dart';
 import '../features/finance/screens/ess_screen.dart';
-import '../features/finance/finance_reports.dart';
 import '../features/assistant/screens/ask_business_screen.dart';
 import '../features/service/screens/my_tickets_screen.dart';
 import '../features/service/screens/ticket_detail_screen.dart';
@@ -145,9 +146,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/finance', builder: (c, s) => const FinanceHubScreen()),
             GoRoute(path: '/finance/gst', builder: (c, s) => const GstScreen()),
             GoRoute(path: '/finance/payables', builder: (c, s) => const PayablesScreen()),
-            GoRoute(path: '/finance/inventory', builder: (c, s) => const ReportViewScreen(config: FinanceReports.inventoryValuation)),
+            GoRoute(path: '/finance/inventory', builder: (c, s) => const InventoryReportScreen()),
             GoRoute(path: '/finance/expenses', builder: (c, s) => const ExpensesScreen()),
             GoRoute(path: '/finance/expenses/new', builder: (c, s) => const ExpenseEntryScreen()),
+            GoRoute(path: '/finance/advances', builder: (c, s) => const AdvanceFloatsScreen()),
             GoRoute(path: '/finance/gl', builder: (c, s) => const GlHubScreen()),
             GoRoute(path: '/finance/gl/tb', builder: (c, s) => const GlStatementScreen(statement: GlStatement.trialBalance)),
             GoRoute(path: '/finance/gl/pnl', builder: (c, s) => const GlStatementScreen(statement: GlStatement.profitLoss)),

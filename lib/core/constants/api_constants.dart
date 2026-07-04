@@ -192,6 +192,8 @@ class ApiConstants {
   static const String vendorOutstanding = '/api/vendor-reports/outstanding';
   static const String officeExpenses = '/api/office-expenses';
   static const String officeExpenseCategories = '/api/office-expenses/categories';
+  static const String advanceFloats = '/api/advance-floats';
+  static String advanceFloatClose(String id) => '/api/advance-floats/$id/close';
   static const String inventoryStockValuation = '/api/inventory-reports/stock-valuation';
   static const String inventoryStockSummary = '/api/inventory-reports/stock-summary';
   // GL (read-only on mobile)
