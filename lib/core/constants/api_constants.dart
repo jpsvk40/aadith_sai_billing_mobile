@@ -94,6 +94,10 @@ class ApiConstants {
   static String collectionCorrection(String id) =>
       '/api/collections/$id/correction';
 
+  // Report print/share (server-rendered table PDF + WhatsApp)
+  static const String reportRenderPdf = '/api/reports/render-pdf';
+  static const String reportWhatsapp = '/api/reports/whatsapp';
+
   // Commissions
   static const String commissions = '/api/rep-commissions';
   static const String commissionSummary = '/api/rep-commissions/summary';

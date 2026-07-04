@@ -53,6 +53,23 @@ class ApiClient {
     }
   }
 
+  /// POST and read the response as raw bytes (e.g. a server-rendered PDF built from a body).
+  Future<List<int>> postBytes(String path, {dynamic data, Duration? timeout}) async {
+    try {
+      final response = await _dio.post<List<int>>(
+        path,
+        data: data,
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: timeout ?? const Duration(seconds: 90),
+        ),
+      );
+      return response.data ?? const <int>[];
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<dynamic> post(String path, {dynamic data, Duration? timeout}) async {
     try {
       final response = await _dio.post(
