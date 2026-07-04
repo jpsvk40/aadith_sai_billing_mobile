@@ -88,8 +88,8 @@ class ReportsHubScreen extends ConsumerWidget {
       endpoint: '/api/reports/payment-collection',
       icon: Icons.payments_outlined,
       color: Color(0xFF059669),
-      supportsPeriod: true,
       totalField: 'collected',
+      drill: 'payment',
       columns: [
         ReportColumn('Period', 'label', primary: true),
         ReportColumn('Billed', 'billed', currency: true),
@@ -128,6 +128,7 @@ class ReportsHubScreen extends ConsumerWidget {
       icon: Icons.local_shipping_outlined,
       color: Color(0xFFD97706),
       totalField: 'grossFreight',
+      drill: 'transport',
       columns: [
         ReportColumn('Transporter', 'transporterName', primary: true),
         ReportColumn('Dispatch', 'dispatches', numeric: true),

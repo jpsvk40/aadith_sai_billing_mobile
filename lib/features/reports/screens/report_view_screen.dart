@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/api_constants.dart';
@@ -35,6 +36,9 @@ class ReportConfig {
   final List<ReportColumn> columns;
   final String? totalField; // currency field summed for the hero + Total row
   final bool supportsPeriod;
+  final Map<String, String> queryParams; // fixed extra query params (drill-downs)
+  final List<Map<String, dynamic>> staticRows; // pre-loaded rows (client-side drill) — skips fetch
+  final String? drill; // 'payment' | 'transport' — makes rows tappable into a sub-report
 
   // Legacy fallback (used only when [columns] is empty).
   final List<String> labelKeys;
@@ -49,6 +53,9 @@ class ReportConfig {
     this.columns = const [],
     this.totalField,
     this.supportsPeriod = false,
+    this.queryParams = const {},
+    this.staticRows = const [],
+    this.drill,
     this.labelKeys = const ['customerName', 'productName', 'name', 'label', 'title', 'invoiceNumber'],
     this.amountKeys = const ['balanceAmount', 'totalSales', 'salesTotal', 'netSales', 'totalAmount', 'netAmount', 'grandTotal', 'total', 'amount', 'outstanding', 'value'],
     this.subtitleKeys = const ['invoiceNumber', 'dueDate', 'orderCount', 'quantity', 'phone', 'agingBucket'],
@@ -61,6 +68,7 @@ const _periods = <(String, String)>[
   ('lastMonth', 'Last Month'),
   ('last90days', 'Last 90 Days'),
   ('thisYear', 'This Year'),
+  ('custom', 'Custom range…'),
 ];
 
 class ReportViewScreen extends ConsumerStatefulWidget {
@@ -72,9 +80,12 @@ class ReportViewScreen extends ConsumerStatefulWidget {
 
 class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   List<Map<String, dynamic>> _rows = const [];
+  dynamic _raw; // full decoded response (for client-side drill sources like transport entries)
   bool _loading = true;
   String? _error;
   String _period = '';
+  DateTimeRange? _customRange;
+  String _search = '';
   bool _busyPdf = false;
   bool _busyWa = false;
 
@@ -86,14 +97,28 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   Future<void> _load() async {
+    // Client-side drill: rows are supplied, no fetch.
+    if (widget.config.staticRows.isNotEmpty) {
+      setState(() { _rows = widget.config.staticRows; _loading = false; _error = null; });
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await _client.get(widget.config.endpoint,
-          queryParams: widget.config.supportsPeriod && _period.isNotEmpty ? {'period': _period} : null);
-      final list = _asList(data);
+      final qp = <String, String>{...widget.config.queryParams};
+      if (widget.config.supportsPeriod) {
+        if (_period == 'custom' && _customRange != null) {
+          final f = _d(_customRange!.start), t = _d(_customRange!.end);
+          qp['fromDate'] = f; qp['toDate'] = t; qp['dateFrom'] = f; qp['dateTo'] = t;
+        } else if (_period.isNotEmpty && _period != 'custom') {
+          qp['period'] = _period;
+        }
+      }
+      final data = await _client.get(widget.config.endpoint, queryParams: qp.isEmpty ? null : qp);
       if (!mounted) return;
-      setState(() { _rows = list; _loading = false; });
+      setState(() { _raw = data; _rows = _asList(data); _loading = false; });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _loading = false; });
@@ -148,24 +173,38 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     return null;
   }
 
+  // Rows after the instant client-side search filter.
+  List<Map<String, dynamic>> get _visible {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _rows;
+    final cfg = widget.config;
+    return _rows.where((r) {
+      if (cfg.columns.isNotEmpty) {
+        return cfg.columns.any((c) => _cell(r, c).toLowerCase().contains(q));
+      }
+      return r.values.any((v) => v.toString().toLowerCase().contains(q));
+    }).toList();
+  }
+
   double get _total {
     final tc = _totalColumn;
-    if (tc != null) return _rows.fold<double>(0, (a, r) => a + _num(r[tc.field]));
-    // legacy fallback
+    final rows = _visible;
+    if (tc != null) return rows.fold<double>(0, (a, r) => a + _num(r[tc.field]));
     for (final k in widget.config.amountKeys) {
-      if (_rows.isNotEmpty && _rows.first.containsKey(k)) {
-        return _rows.fold<double>(0, (a, r) => a + _num(r[k]));
+      if (rows.isNotEmpty && rows.first.containsKey(k)) {
+        return rows.fold<double>(0, (a, r) => a + _num(r[k]));
       }
     }
     return 0;
   }
 
-  // ── Build the print payload (columns + formatted rows + Total footer) ──
+  // ── Print payload (columns + formatted rows + Total footer) — reflects the current filter ──
   Map<String, dynamic> _payload() {
     final cfg = widget.config;
     final cols = cfg.columns;
+    final rows = _visible;
     final columns = cols.map((c) => {'header': c.header, 'align': c.align}).toList();
-    final rows = _rows.map((r) => cols.map((c) => _cell(r, c)).toList()).toList();
+    final body = rows.map((r) => cols.map((c) => _cell(r, c)).toList()).toList();
     final tc = _totalColumn;
     List<String>? totals;
     if (tc != null) {
@@ -174,22 +213,33 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
         if (c.field == tc.field) return CurrencyUtils.format(_total);
         return '';
       }).toList();
-      // ensure the first column reads "Total" even if none marked primary
       if (!cols.any((c) => c.primary) && totals.isNotEmpty) totals[0] = 'Total';
     }
-    final periodLabel = _periods.firstWhere((p) => p.$1 == _period, orElse: () => ('', 'All Time')).$2;
     return {
       'title': cfg.title,
-      'subtitle': cfg.supportsPeriod ? periodLabel : '',
+      'subtitle': _subtitle(),
       'columns': columns,
-      'rows': rows,
+      'rows': body,
       if (totals != null) 'totals': totals,
       if (tc != null) 'total': CurrencyUtils.format(_total),
     };
   }
 
+  String _subtitle() {
+    final parts = <String>[];
+    if (widget.config.supportsPeriod) {
+      if (_period == 'custom' && _customRange != null) {
+        parts.add('${_d(_customRange!.start)} → ${_d(_customRange!.end)}');
+      } else {
+        parts.add(_periods.firstWhere((p) => p.$1 == _period, orElse: () => ('', 'All Time')).$2);
+      }
+    }
+    if (_search.trim().isNotEmpty) parts.add('filter "${_search.trim()}"');
+    return parts.join(' · ');
+  }
+
   Future<void> _sharePdf() async {
-    if (_busyPdf || _rows.isEmpty) return;
+    if (_busyPdf || _visible.isEmpty) return;
     setState(() => _busyPdf = true);
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
@@ -242,7 +292,7 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   }
 
   Future<void> _sendWhatsApp() async {
-    if (_busyWa || _rows.isEmpty) return;
+    if (_busyWa || _visible.isEmpty) return;
     final number = await _promptNumber();
     if (number == null || number.trim().isEmpty || !mounted) return;
     setState(() => _busyWa = true);
@@ -269,9 +319,87 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     }
   }
 
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+      initialDateRange: _customRange,
+    );
+    if (picked != null) {
+      setState(() { _period = 'custom'; _customRange = picked; });
+      _load();
+    }
+  }
+
+  // ── Drill-down: build the child report for a tapped row ──
+  void _openDrill(Map<String, dynamic> row) {
+    final child = _buildDrill(row);
+    if (child != null) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportViewScreen(config: child)));
+    }
+  }
+
+  ReportConfig? _buildDrill(Map<String, dynamic> row) {
+    final cfg = widget.config;
+    switch (cfg.drill) {
+      case 'payment':
+        final label = row['label']?.toString() ?? '';
+        DateTime? m;
+        try { m = DateFormat('MMM yyyy').parse(label); } catch (_) { m = null; }
+        if (m == null) return null;
+        final start = DateTime(m.year, m.month, 1);
+        final end = DateTime(m.year, m.month + 1, 0);
+        return ReportConfig(
+          title: 'Payments · $label',
+          endpoint: '/api/reports/payment-collection-detail',
+          icon: Icons.payments_outlined,
+          color: cfg.color,
+          queryParams: {'fromDate': _d(start), 'toDate': _d(end)},
+          totalField: 'amount',
+          columns: const [
+            ReportColumn('Customer', 'customerName', primary: true),
+            ReportColumn('Date', 'paymentDate', isDate: true),
+            ReportColumn('Mode', 'paymentMode'),
+            ReportColumn('Invoice', 'invoiceNo'),
+            ReportColumn('Amount', 'amount', currency: true),
+          ],
+        );
+      case 'transport':
+        final name = row['transporterName']?.toString() ?? '';
+        final entries = (_raw is Map ? (_raw['entries'] as List?) : null)
+                ?.whereType<Map>()
+                .map((e) => e.cast<String, dynamic>())
+                .where((e) => (e['transporterName'] ?? '').toString() == name)
+                .toList() ??
+            const <Map<String, dynamic>>[];
+        return ReportConfig(
+          title: 'Dispatches · $name',
+          endpoint: '',
+          icon: Icons.local_shipping_outlined,
+          color: cfg.color,
+          staticRows: entries,
+          totalField: 'grossFreight',
+          columns: const [
+            ReportColumn('Order', 'orderNo', primary: true),
+            ReportColumn('Customer', 'customerName'),
+            ReportColumn('City', 'city'),
+            ReportColumn('Vehicle', 'vehicleNo'),
+            ReportColumn('LR', 'lrNo'),
+            ReportColumn('Date', 'dispatchDate', isDate: true),
+            ReportColumn('Pkgs', 'totalPackages', numeric: true),
+            ReportColumn('Freight', 'grossFreight', currency: true),
+          ],
+        );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cfg = widget.config;
+    final visible = _visible;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -301,17 +429,18 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
                   onRefresh: _load,
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: _rows.length + 1,
+                    itemCount: visible.length + 1,
                     itemBuilder: (ctx, i) {
-                      if (i == 0) return _header(cfg, _total);
-                      return _row(_rows[i - 1], cfg);
+                      if (i == 0) return _header(cfg, _total, visible.length);
+                      return _row(visible[i - 1], cfg);
                     },
                   ),
                 ),
     );
   }
 
-  Widget _header(ReportConfig cfg, double total) {
+  Widget _header(ReportConfig cfg, double total, int shown) {
+    final tc = _totalColumn;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -330,15 +459,28 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
             ),
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Total', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.85))),
+              Text(tc != null ? 'Total' : 'Rows', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.85))),
               const SizedBox(height: 3),
-              Text(CurrencyUtils.format(total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
+              Text(tc != null ? CurrencyUtils.format(total) : '$shown', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
             ])),
-            Text('${_rows.length} rows', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.85))),
+            Text('$shown rows', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.85))),
           ]),
         ),
+        const SizedBox(height: 12),
+        // Search
+        TextField(
+          onChanged: (v) => setState(() => _search = v),
+          decoration: InputDecoration(
+            hintText: 'Search in ${cfg.title.toLowerCase()}…',
+            prefixIcon: const Icon(Icons.search, size: 20),
+            isDense: true, filled: true, fillColor: AppColors.surface,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+          ),
+        ),
         if (cfg.supportsPeriod) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
@@ -349,28 +491,41 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
                 child: DropdownButton<String>(
                   isExpanded: true,
                   value: _period,
-                  items: _periods.map((p) => DropdownMenuItem(value: p.$1, child: Text(p.$2, style: const TextStyle(fontSize: 14)))).toList(),
-                  onChanged: (v) { setState(() => _period = v ?? ''); _load(); },
+                  items: _periods.map((p) => DropdownMenuItem(
+                        value: p.$1,
+                        child: Text(p.$1 == 'custom' && _customRange != null ? '${_d(_customRange!.start)} → ${_d(_customRange!.end)}' : p.$2, style: const TextStyle(fontSize: 14)),
+                      )).toList(),
+                  onChanged: (v) {
+                    if (v == 'custom') { _pickCustomRange(); return; }
+                    setState(() { _period = v ?? ''; _customRange = null; });
+                    _load();
+                  },
                 ),
               )),
             ]),
           ),
         ],
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Row(children: [
-          const Icon(Icons.picture_as_pdf_outlined, size: 13, color: AppColors.textMuted),
+          Icon(cfg.drill != null ? Icons.touch_app_outlined : Icons.picture_as_pdf_outlined, size: 13, color: AppColors.textMuted),
           const SizedBox(width: 4),
-          const Expanded(child: Text('Download or WhatsApp this report from the top-right', style: TextStyle(fontSize: 11, color: AppColors.textMuted))),
+          Expanded(child: Text(
+            cfg.drill != null ? 'Tap a row to drill in · Download or WhatsApp from the top-right' : 'Download or WhatsApp this report from the top-right',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted))),
         ]),
         const SizedBox(height: 8),
-        if (_rows.isEmpty && !_loading)
-          const Padding(padding: EdgeInsets.symmetric(vertical: 40), child: Center(child: Text('No data for this report', style: TextStyle(color: AppColors.textSecondary)))),
+        if (visibleEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 40), child: Center(child: Text('No matching rows', style: TextStyle(color: AppColors.textSecondary)))),
       ]),
     );
   }
 
+  bool get visibleEmpty => _visible.isEmpty && !_loading;
+
   Widget _row(Map<String, dynamic> r, ReportConfig cfg) {
-    // Legacy 2-field rendering when no columns are declared.
+    final tappable = cfg.drill != null;
+    Widget content;
+
     if (cfg.columns.isEmpty) {
       final label = _first(r, cfg.labelKeys) ?? '—';
       final subtitle = _first(r, cfg.subtitleKeys);
@@ -378,43 +533,48 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
       for (final k in cfg.amountKeys) {
         if (r.containsKey(k)) { amount = _num(r[k]); if (amount != 0) break; }
       }
-      return _shell(child: Row(children: [
+      content = Row(children: [
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
           if (subtitle != null) Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
         ])),
         if (amount != 0) Text(CurrencyUtils.format(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      ]));
+      ]);
+    } else {
+      final cols = cfg.columns;
+      final primary = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
+      final rest = cols.where((c) => c != primary).toList();
+      content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(_cell(r, primary).isEmpty ? '—' : _cell(r, primary),
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textPrimary))),
+          if (tappable) const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+        ]),
+        const SizedBox(height: 8),
+        Wrap(spacing: 14, runSpacing: 8, children: rest.map((c) {
+          final val = _cell(r, c);
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(c.header, style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 1),
+            Text(val.isEmpty ? '—' : val,
+                style: TextStyle(fontSize: 12.5, fontWeight: c.currency ? FontWeight.w800 : FontWeight.w600,
+                    color: c.currency ? AppColors.textPrimary : AppColors.textSecondary)),
+          ]);
+        }).toList()),
+      ]);
     }
 
-    final cols = cfg.columns;
-    final primary = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
-    final rest = cols.where((c) => c != primary).toList();
+    final card = Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: AppColors.surface, borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: content,
+    );
 
-    return _shell(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(_cell(r, primary).isEmpty ? '—' : _cell(r, primary),
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textPrimary)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 14, runSpacing: 8, children: rest.map((c) {
-        final val = _cell(r, c);
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(c.header, style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 1),
-          Text(val.isEmpty ? '—' : val,
-              style: TextStyle(fontSize: 12.5, fontWeight: c.currency ? FontWeight.w800 : FontWeight.w600,
-                  color: c.currency ? AppColors.textPrimary : AppColors.textSecondary)),
-        ]);
-      }).toList()),
-    ]));
+    if (!tappable) return card;
+    return InkWell(onTap: () => _openDrill(r), borderRadius: BorderRadius.circular(12), child: card);
   }
-
-  Widget _shell({required Widget child}) => Container(
-        margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: AppColors.surface, borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border, width: 0.5),
-        ),
-        child: child,
-      );
 }
