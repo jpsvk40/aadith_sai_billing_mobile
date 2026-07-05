@@ -12,6 +12,7 @@ import '../../../data/network/api_client.dart';
 import '../../../data/models/assistant_model.dart';
 import '../../../data/repositories/ai_assistant_repository.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../assistant_nav.dart';
 
 /// "Ask your business" — owner/admin conversational assistant (read-only).
 /// Supports typed input, press-and-hold one-shot voice, and a fully hands-free
@@ -290,6 +291,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     // Always resolve the loading bubble; only continue the loop if still current.
     _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans?.suggestions ?? const [], data: ans?.data ?? const [], navigate: ans?.navigate, animate: true));
     _scrollToEnd();
+    _maybeAutoOpen(ans);
     if (_vstate == _VoiceState.off || myToken != _genToken) return; // interrupted
     if (_speakAnswers) {
       if (mounted) setState(() => _vstate = _VoiceState.speaking);
@@ -415,12 +417,27 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
       final answerText = ans.answer.isEmpty ? '(no answer)' : ans.answer;
       _replaceLast(AssistantTurn(isUser: false, text: answerText, suggestions: ans.suggestions, data: ans.data, navigate: ans.navigate, animate: true));
       _speak(answerText);
+      _maybeAutoOpen(ans);
     } catch (e) {
       _replaceLast(AssistantTurn(isUser: false, text: _friendlyError(e)));
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollToEnd();
     }
+  }
+
+  /// The user explicitly asked to go somewhere ("take me to X" / "yes, open it") —
+  /// open it after a beat so they see the answer first. The button stays in the
+  /// transcript, so coming back to the chat keeps it usable.
+  void _maybeAutoOpen(AssistantAnswer? ans) {
+    final nav = ans?.navigate;
+    if (nav == null || !nav.auto || !nav.openableOnMobile) return;
+    final wasVoice = _vstate != _VoiceState.off;
+    Future.delayed(Duration(milliseconds: wasVoice ? 1600 : 900), () {
+      if (!mounted) return;
+      if (_vstate != _VoiceState.off) _exitVoiceMode();
+      openAssistantDestination(context, ref, nav);
+    });
   }
 
   String _friendlyError(Object e) {
@@ -788,7 +805,8 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
             child: Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 4),
               child: FilledButton.tonal(
-                onPressed: () => context.go(b.alertsRoute!),
+                onPressed: () => openAssistantDestination(
+                    context, ref, AssistantNavigate(label: 'Alerts', mobileRoute: b.alertsRoute)),
                 child: Text('Open Alerts (${b.alertCount})'),
               ),
             ),
@@ -804,7 +822,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
         child: Padding(
           padding: const EdgeInsets.only(top: 2, bottom: 6),
           child: OutlinedButton.icon(
-            onPressed: () => context.go(nav.mobileRoute!),
+            onPressed: () => openAssistantDestination(context, ref, nav),
             icon: const Icon(Icons.open_in_new, size: 18),
             label: Text('Open ${nav.label}'),
             style: OutlinedButton.styleFrom(

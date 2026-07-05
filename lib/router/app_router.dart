@@ -11,6 +11,7 @@ import '../features/alerts/screens/alerts_screen.dart';
 import '../features/approvals/screens/approvals_screen.dart';
 import '../features/reports/screens/reports_hub_screen.dart';
 import '../features/reports/screens/report_view_screen.dart';
+import '../features/reports/report_registry.dart';
 import '../features/collections/screens/collection_detail_screen.dart';
 import '../features/collections/screens/collection_list_screen.dart';
 import '../features/collections/screens/collection_payment_screen.dart';
@@ -98,6 +99,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       navigatorKey: _rootNavigatorKey,
       initialLocation: '/splash',
       refreshListenable: authNotifier,
+      // Unknown deep link (e.g. a newer backend offered a route this app version doesn't
+      // have) — show a friendly page with a way home instead of the default error screen.
+      errorBuilder: (context, state) => Scaffold(
+        appBar: AppBar(title: const Text('Not found')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.explore_off_outlined, size: 44, color: Colors.grey),
+              const SizedBox(height: 14),
+              const Text('This screen isn\'t available', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              const Text('It may need a newer version of the app.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () => context.go('/dashboard'),
+                icon: const Icon(Icons.home_outlined, size: 18),
+                label: const Text('Go Home'),
+              ),
+            ]),
+          ),
+        ),
+      ),
       redirect: (context, state) {
         final authState = ref.read(authProvider);
         return redirectForAuthState(authState, state.matchedLocation);
@@ -245,6 +269,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
             GoRoute(path: '/reports', builder: (c, s) => const ReportsHubScreen()),
             GoRoute(path: '/reports/view', builder: (c, s) => ReportViewScreen(config: s.extra as ReportConfig)),
+            // String-addressable report (deep-linkable, e.g. from the AI assistant).
+            GoRoute(path: '/reports/view/:key', builder: (c, s) => KeyedReportScreen(reportKey: s.pathParameters['key']!)),
             GoRoute(path: '/ask-business', builder: (c, s) => const AskBusinessScreen()),
             // ─── Service & Warranty ───
             GoRoute(path: '/service/home', builder: (c, s) => const ServiceHomeScreen()),

@@ -21,8 +21,9 @@ class AssistantNavigate {
   final String label; // human label (e.g. 'Invoices')
   final String? route; // web-portal route
   final String? mobileRoute; // mobile-app route — null means web-only
+  final bool auto; // true = the user explicitly asked to go there → open without a tap
 
-  const AssistantNavigate({this.key, required this.label, this.route, this.mobileRoute});
+  const AssistantNavigate({this.key, required this.label, this.route, this.mobileRoute, this.auto = false});
 
   bool get openableOnMobile => (mobileRoute ?? '').isNotEmpty;
 
@@ -31,6 +32,7 @@ class AssistantNavigate {
         label: json['label']?.toString() ?? 'Open',
         route: json['route']?.toString(),
         mobileRoute: (json['mobileRoute']?.toString().isNotEmpty ?? false) ? json['mobileRoute'].toString() : null,
+        auto: json['auto'] == true,
       );
 }
 

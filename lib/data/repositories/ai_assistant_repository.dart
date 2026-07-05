@@ -20,6 +20,7 @@ class AiAssistantRepository {
   Future<AssistantAnswer> ask(String question, {List<Map<String, String>> history = const []}) async {
     final data = await _client.post(ApiConstants.aiAssistantAsk, data: {
       'question': question,
+      'client': 'mobile', // lets the server prefer mobile-openable pages in nav answers
       if (history.isNotEmpty) 'history': history,
     });
     return AssistantAnswer.fromJson(_asMap(data));
