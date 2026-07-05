@@ -7,6 +7,7 @@ import '../../../core/utils/date_utils.dart';
 import '../../../data/models/vendor_purchase_model.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
+import '../purchase_bill_scan.dart';
 import '../providers/purchase_list_provider.dart';
 
 const _pOrange = Color(0xFFF59E0B);
@@ -77,10 +78,16 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
       appBar: AppBar(
         title: const Text('Purchases'),
         actions: [
+          IconButton(
+            tooltip: 'Scan bill (AI)',
+            icon: const Icon(Icons.document_scanner_outlined),
+            onPressed: () => launchBillScan(context, ref),
+          ),
           IconButton(icon: const Icon(Icons.add), onPressed: () => context.push('/purchases/create')),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'newPurchase',
         onPressed: () => context.push('/purchases/create'),
         icon: const Icon(Icons.add),
         label: const Text('New Purchase'),

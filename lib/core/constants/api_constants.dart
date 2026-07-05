@@ -51,6 +51,7 @@ class ApiConstants {
 
   // Vendor purchases (Admin/Owner — purchase entry on mobile)
   static const String vendorPurchases = '/api/vendor-purchases';
+  static const String vendorPurchasePriceHint = '/api/vendor-purchases/price-hint';
   static String vendorPurchaseDetail(String id) => '/api/vendor-purchases/$id';
   static const String vendorPayments = '/api/vendor-payments';
   static const String vendorCreditNotes = '/api/vendor-credit-notes';
