@@ -6,33 +6,81 @@ import '../reports/screens/report_view_screen.dart';
 /// response shapes (curl-verified 2026-07-03); complex statements (P&L/BS/TB, GST,
 /// payables, payroll) have bespoke screens instead.
 class FinanceReports {
-  // ── Payables quick links ──
+  // ── Purchasing / Payables (grouped by party · date filter · PDF + WhatsApp) ──
+  static const vendorOutstanding = ReportConfig(
+    title: 'Vendor Outstanding',
+    endpoint: '/api/vendor-reports/outstanding',
+    icon: Icons.account_balance_wallet_outlined,
+    color: Color(0xFFEF4444),
+    supportsPeriod: true,
+    totalField: 'outstandingAmount',
+    groupBy: 'vendor.vendorName',
+    groupNoun: 'bills',
+    groupLabel: 'vendor',
+    columns: [
+      ReportColumn('Vendor', 'vendor.vendorName', primary: true),
+      ReportColumn('Invoice', 'invoiceNumber'),
+      ReportColumn('Bill', 'totalAmount', currency: true),
+      ReportColumn('Paid', 'paidAmount', currency: true),
+      ReportColumn('Balance', 'outstandingAmount', currency: true),
+      ReportColumn('Due', 'dueDate', isDate: true),
+      ReportColumn('Days', 'daysDiff', numeric: true),
+    ],
+  );
   static const vendorPayments = ReportConfig(
     title: 'Vendor Payments',
     endpoint: '/api/vendor-payments',
     icon: Icons.payments_outlined,
     color: Color(0xFF059669),
-    labelKeys: ['vendorName', 'name', 'partyName', 'paymentNumber'],
-    amountKeys: ['amount', 'paidAmount', 'totalAmount', 'total'],
-    subtitleKeys: ['paymentNumber', 'paymentDate', 'date', 'mode', 'reference'],
+    supportsPeriod: true,
+    totalField: 'amount',
+    groupBy: 'vendor.vendorName',
+    groupNoun: 'payments',
+    groupLabel: 'vendor',
+    columns: [
+      ReportColumn('Vendor', 'vendor.vendorName', primary: true),
+      ReportColumn('Invoice', 'vendorPurchase.invoiceNumber'),
+      ReportColumn('Date', 'paymentDate', isDate: true),
+      ReportColumn('Mode', 'paymentMode'),
+      ReportColumn('Ref', 'referenceNo'),
+      ReportColumn('Amount', 'amount', currency: true),
+    ],
   );
   static const vendorCreditNotes = ReportConfig(
     title: 'Vendor Credit Notes',
     endpoint: '/api/vendor-credit-notes',
     icon: Icons.assignment_return_outlined,
     color: Color(0xFFD97706),
-    labelKeys: ['vendorName', 'name', 'partyName', 'creditNoteNumber'],
-    amountKeys: ['amount', 'creditAmount', 'totalAmount', 'total'],
-    subtitleKeys: ['creditNoteNumber', 'noteNumber', 'date', 'reason'],
+    supportsPeriod: true,
+    totalField: 'totalAmount',
+    groupBy: 'vendor.vendorName',
+    groupNoun: 'notes',
+    groupLabel: 'vendor',
+    columns: [
+      ReportColumn('Vendor', 'vendor.vendorName', primary: true),
+      ReportColumn('CN No', 'creditNoteNumber'),
+      ReportColumn('Invoice', 'vendorPurchase.invoiceNumber'),
+      ReportColumn('Date', 'creditNoteDate', isDate: true),
+      ReportColumn('Reason', 'reason'),
+      ReportColumn('Amount', 'totalAmount', currency: true),
+    ],
   );
   static const customerCreditNotes = ReportConfig(
     title: 'Customer Credit Notes',
     endpoint: '/api/customer-credit-notes',
     icon: Icons.assignment_returned_outlined,
     color: Color(0xFF7C3AED),
-    labelKeys: ['customerName', 'name', 'partyName', 'creditNoteNumber'],
-    amountKeys: ['amount', 'creditAmount', 'totalAmount', 'total'],
-    subtitleKeys: ['creditNoteNumber', 'noteNumber', 'date', 'reason'],
+    supportsPeriod: true,
+    totalField: 'totalAmount',
+    groupBy: 'customerName',
+    groupNoun: 'notes',
+    columns: [
+      ReportColumn('Customer', 'customerName', primary: true),
+      ReportColumn('CN No', 'creditNoteNumber'),
+      ReportColumn('Date', 'creditNoteDate', isDate: true),
+      ReportColumn('Reason', 'reason'),
+      ReportColumn('Amount', 'totalAmount', currency: true),
+    ],
   );
 
   // ── Inventory (shape: {items:[{itemName,unit,totalQty,totalValueWAC,…}]}) ──

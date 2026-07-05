@@ -80,23 +80,35 @@ class _PayablesScreenState extends ConsumerState<PayablesScreen> {
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(padding: const EdgeInsets.all(14), children: [
-                    // Hero
+                    // Hero — tap to open the full grouped report (filter · PDF · WhatsApp)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(18),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: const BoxDecoration(gradient: LinearGradient(colors: [_red, Color(0xFFB91C1C)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-                        child: Stack(children: [
-                          Positioned(right: -20, top: -20, child: Container(width: 100, height: 100, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)))),
-                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Total payable', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.85))),
-                            const SizedBox(height: 4),
-                            Text(CurrencyUtils.format(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-                            const SizedBox(height: 8),
-                            Text('${_vendors.length} vendor${_vendors.length == 1 ? '' : 's'} · $billCount open bill${billCount == 1 ? '' : 's'}',
-                                style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
-                          ]),
-                        ]),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => context.push('/reports/view', extra: FinanceReports.vendorOutstanding),
+                          child: Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: const BoxDecoration(gradient: LinearGradient(colors: [_red, Color(0xFFB91C1C)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+                            child: Stack(children: [
+                              Positioned(right: -20, top: -20, child: Container(width: 100, height: 100, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)))),
+                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text('Total payable', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.85))),
+                                const SizedBox(height: 4),
+                                Text(CurrencyUtils.format(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+                                const SizedBox(height: 8),
+                                Text('${_vendors.length} vendor${_vendors.length == 1 ? '' : 's'} · $billCount open bill${billCount == 1 ? '' : 's'}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 10),
+                                Row(children: [
+                                  Icon(Icons.open_in_full, size: 12, color: Colors.white.withValues(alpha: 0.9)),
+                                  const SizedBox(width: 5),
+                                  Text('Full report · filter · PDF · WhatsApp', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.9))),
+                                ]),
+                              ]),
+                            ]),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),

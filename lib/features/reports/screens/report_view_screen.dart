@@ -41,6 +41,7 @@ class ReportConfig {
   final String? drill; // 'payment' | 'transport' — makes rows tappable into a sub-report
   final String? groupBy; // row field to collapse rows under (e.g. customer name)
   final String groupNoun; // plural noun for the per-group count ("invoices", "rows")
+  final String groupLabel; // singular noun for the group ("customer", "vendor")
 
   // Legacy fallback (used only when [columns] is empty).
   final List<String> labelKeys;
@@ -60,6 +61,7 @@ class ReportConfig {
     this.drill,
     this.groupBy,
     this.groupNoun = 'rows',
+    this.groupLabel = 'customer',
     this.labelKeys = const ['customerName', 'productName', 'name', 'label', 'title', 'invoiceNumber'],
     this.amountKeys = const ['balanceAmount', 'totalSales', 'salesTotal', 'netSales', 'totalAmount', 'netAmount', 'grandTotal', 'total', 'amount', 'outstanding', 'value'],
     this.subtitleKeys = const ['invoiceNumber', 'dueDate', 'orderCount', 'quantity', 'phone', 'agingBucket'],
@@ -105,6 +107,23 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
 
   String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Concrete date window for a named period preset (mirrors the backend presets).
+  DateTimeRange? _presetRange(String p) {
+    final now = DateTime.now();
+    switch (p) {
+      case 'thisMonth':
+        return DateTimeRange(start: DateTime(now.year, now.month, 1), end: DateTime(now.year, now.month + 1, 0));
+      case 'lastMonth':
+        return DateTimeRange(start: DateTime(now.year, now.month - 1, 1), end: DateTime(now.year, now.month, 0));
+      case 'last90days':
+        return DateTimeRange(start: now.subtract(const Duration(days: 90)), end: now);
+      case 'thisYear':
+        return DateTimeRange(start: DateTime(now.year, 1, 1), end: DateTime(now.year, 12, 31));
+      default:
+        return null;
+    }
+  }
+
   Future<void> _load() async {
     // Client-side drill: rows are supplied, no fetch.
     if (widget.config.staticRows.isNotEmpty) {
@@ -120,6 +139,13 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
           qp['fromDate'] = f; qp['toDate'] = t; qp['dateFrom'] = f; qp['dateTo'] = t;
         } else if (_period.isNotEmpty && _period != 'custom') {
           qp['period'] = _period;
+          // Also send the preset as concrete dates so endpoints that only read
+          // dateFrom/dateTo (vendor reports, credit notes) filter correctly too.
+          final r = _presetRange(_period);
+          if (r != null) {
+            final f = _d(r.start), t = _d(r.end);
+            qp['fromDate'] = f; qp['toDate'] = t; qp['dateFrom'] = f; qp['dateTo'] = t;
+          }
         }
       }
       final data = await _client.get(widget.config.endpoint, queryParams: qp.isEmpty ? null : qp);
@@ -143,6 +169,20 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
 
   double _num(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
 
+  /// Resolve a (possibly dotted) field path against a row, e.g. 'vendor.vendorName'.
+  dynamic _get(Map<String, dynamic> r, String path) {
+    if (!path.contains('.')) return r[path];
+    dynamic cur = r;
+    for (final part in path.split('.')) {
+      if (cur is Map) {
+        cur = cur[part];
+      } else {
+        return null;
+      }
+    }
+    return cur;
+  }
+
   String? _first(Map<String, dynamic> r, List<String> keys) {
     for (final k in keys) {
       final v = r[k];
@@ -152,7 +192,7 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   }
 
   String _cell(Map<String, dynamic> r, ReportColumn c) {
-    final v = r[c.field];
+    final v = _get(r, c.field);
     if (c.currency) return CurrencyUtils.format(_num(v));
     if (c.isDate) {
       final s = v?.toString() ?? '';
@@ -197,7 +237,7 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     final gb = widget.config.groupBy;
     final map = <String, List<Map<String, dynamic>>>{};
     for (final r in _visible) {
-      final raw = gb == null ? null : r[gb]?.toString().trim();
+      final raw = gb == null ? null : _get(r, gb)?.toString().trim();
       final key = (raw == null || raw.isEmpty) ? '—' : raw;
       (map[key] ??= []).add(r);
     }
@@ -207,13 +247,13 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   double _groupTotal(List<Map<String, dynamic>> rows) {
     final tc = _totalColumn;
     if (tc == null) return 0;
-    return rows.fold<double>(0, (a, r) => a + _num(r[tc.field]));
+    return rows.fold<double>(0, (a, r) => a + _num(_get(r, tc.field)));
   }
 
   double get _total {
     final tc = _totalColumn;
     final rows = _visible;
-    if (tc != null) return rows.fold<double>(0, (a, r) => a + _num(r[tc.field]));
+    if (tc != null) return rows.fold<double>(0, (a, r) => a + _num(_get(r, tc.field)));
     for (final k in widget.config.amountKeys) {
       if (rows.isNotEmpty && rows.first.containsKey(k)) {
         return rows.fold<double>(0, (a, r) => a + _num(r[k]));
@@ -566,7 +606,7 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(_grouped ? Icons.check_circle : Icons.circle_outlined, size: 15, color: _grouped ? cfg.color : AppColors.textMuted),
                   const SizedBox(width: 6),
-                  Text('Group by customer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _grouped ? cfg.color : AppColors.textSecondary)),
+                  Text('Group by ${cfg.groupLabel}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _grouped ? cfg.color : AppColors.textSecondary)),
                 ]),
               ),
             ),
@@ -587,7 +627,7 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
           const SizedBox(width: 4),
           Expanded(child: Text(
             _groupingOn
-                ? 'Tap a customer to see their ${cfg.groupNoun} · Download or WhatsApp from the top-right'
+                ? 'Tap a ${cfg.groupLabel} to see their ${cfg.groupNoun} · Download or WhatsApp from the top-right'
                 : cfg.drill != null ? 'Tap a row to drill in · Download or WhatsApp from the top-right' : 'Download or WhatsApp this report from the top-right',
             style: const TextStyle(fontSize: 11, color: AppColors.textMuted))),
         ]),
