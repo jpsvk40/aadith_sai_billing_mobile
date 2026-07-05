@@ -382,11 +382,13 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
           color: cfg.color,
           queryParams: {'fromDate': _d(start), 'toDate': _d(end)},
           totalField: 'amount',
+          groupBy: 'customerName',
+          groupNoun: 'payments',
           columns: const [
             ReportColumn('Customer', 'customerName', primary: true),
+            ReportColumn('Invoice', 'invoiceNo'),
             ReportColumn('Date', 'paymentDate', isDate: true),
             ReportColumn('Mode', 'paymentMode'),
-            ReportColumn('Invoice', 'invoiceNo'),
             ReportColumn('Amount', 'amount', currency: true),
           ],
         );
@@ -405,6 +407,8 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
           color: cfg.color,
           staticRows: entries,
           totalField: 'grossFreight',
+          groupBy: 'customerName',
+          groupNoun: 'dispatches',
           columns: const [
             ReportColumn('Order', 'orderNo', primary: true),
             ReportColumn('Customer', 'customerName'),
@@ -654,15 +658,19 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
       ]);
     } else {
       final cols = cfg.columns;
-      // In a grouped sub-row the customer (primary) is already shown on the group header,
-      // so headline with the row's own identifier (e.g. invoice no) and drop the primary.
+      // In a grouped sub-row the grouped column (e.g. customer) is already shown on the
+      // header, so drop it and headline with the row's own identifier (invoice/order no).
       final ReportColumn headline;
       final List<ReportColumn> rest;
       if (sub) {
-        final nonPrimary = cols.where((c) => !c.primary).toList();
-        headline = nonPrimary.firstWhere((c) => !c.currency && !c.numeric && !c.isDate,
-            orElse: () => nonPrimary.isNotEmpty ? nonPrimary.first : cols.first);
-        rest = cols.where((c) => c != headline && !c.primary).toList();
+        final gb = cfg.groupBy;
+        final shown = cols.where((c) => c.field != gb).toList(); // hide the grouped column
+        final primaryCol = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
+        headline = primaryCol.field != gb
+            ? primaryCol // primary is a real identifier (order no) — use it
+            : shown.firstWhere((c) => !c.currency && !c.numeric && !c.isDate,
+                orElse: () => shown.isNotEmpty ? shown.first : cols.first);
+        rest = shown.where((c) => c != headline).toList();
       } else {
         headline = cols.firstWhere((c) => c.primary, orElse: () => cols.first);
         rest = cols.where((c) => c != headline).toList();
