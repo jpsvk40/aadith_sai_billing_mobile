@@ -450,13 +450,22 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: saving || totalController.text.isEmpty
                   ? null
-                  : () => _recordPayment(ctx, customer, totalController.text, selectedMode),
+                  : () async {
+                      setState(() => saving = true);
+                      final ok = await _recordPayment(customer, totalController.text, selectedMode);
+                      if (!ctx.mounted) return;
+                      if (ok) {
+                        Navigator.pop(ctx);
+                      } else {
+                        setState(() => saving = false);
+                      }
+                    },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF15803D)),
-              child: Text(saving ? 'Saving...' : 'Pay', style: const TextStyle(color: Colors.white)),
+              child: Text(saving ? 'Saving…' : 'Pay', style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -464,20 +473,29 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
     );
   }
 
-  Future<void> _recordPayment(BuildContext ctx, Map<String, dynamic> customer, String amount, String mode) async {
+  /// Records the payment. Returns true on success (caller closes the dialog). Captures the
+  /// messenger before the await so no BuildContext is used across the async gap.
+  Future<bool> _recordPayment(Map<String, dynamic> customer, String amount, String mode) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final parsed = double.tryParse(amount.trim());
+    if (parsed == null || parsed <= 0) {
+      messenger.showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
+      return false;
+    }
     try {
       final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
       await client.post(ApiConstants.recordPayment, data: {
         'customerId': customer['customerId'],
-        'amount': double.parse(amount),
+        'amount': parsed,
         'paymentMode': mode,
       });
-      if (!mounted) return;
-      Navigator.pop(ctx);
+      if (!mounted) return false;
       _load();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment recorded')));
+      messenger.showSnackBar(const SnackBar(content: Text('Payment recorded')));
+      return true;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      return false;
     }
   }
 
