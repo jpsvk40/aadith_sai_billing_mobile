@@ -12,6 +12,7 @@ class AppBottomNavBar extends ConsumerWidget {
   static const _home = _NavTab(label: 'Home', icon: Icons.home_outlined, activeIcon: Icons.home, route: '/dashboard');
   static const _orders = _NavTab(label: 'Orders', icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long, route: '/orders');
   static const _payments = _NavTab(label: 'Payments', icon: Icons.payments_outlined, activeIcon: Icons.payments, route: '/payments');
+  static const _receivables = _NavTab(label: 'Outstanding', icon: Icons.receipt_outlined, activeIcon: Icons.receipt, route: '/receivables');
   static const _collections = _NavTab(label: 'Collections', icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet, route: '/collections');
   static const _commission = _NavTab(label: 'Commission', icon: Icons.percent_outlined, activeIcon: Icons.percent, route: '/commissions');
   static const _alerts = _NavTab(label: 'Alerts', icon: Icons.notifications_outlined, activeIcon: Icons.notifications, route: '/alerts');
@@ -72,7 +73,10 @@ class AppBottomNavBar extends ConsumerWidget {
     if (isRep) {
       // Reps: module-driven (handles a rep who does both sales + collection).
       if (user?.hasModule('orders') == true) tabs.add(_orders);
-      if (user?.hasModule('collections') == true) tabs.add(_collections);
+      if (user?.hasModule('collections') == true) {
+        tabs.add(_receivables);
+        tabs.add(_collections);
+      }
       if (user?.hasModule('reports') == true) tabs.add(_commission);
     } else {
       // ERP (construction) admins get their module tabs — Projects/Tenders/Machinery/Letters —
@@ -95,6 +99,8 @@ class AppBottomNavBar extends ConsumerWidget {
         } else if (user?.hasModule('payments') == true) {
           tabs.add(_payments);
         }
+        // Outstanding + Receivables hub for outstanding module
+        if (user?.hasModule('outstanding') == true) tabs.add(_receivables);
         if (user?.hasModule('warranty_service') == true) tabs.add(_service);
         tabs.add(_approvals);
       }

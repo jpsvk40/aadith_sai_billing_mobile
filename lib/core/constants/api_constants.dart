@@ -70,6 +70,9 @@ class ApiConstants {
   // Mobile home (role-aware overview: financials + activity feed)
   static const String mobileHome = '/api/reports/mobile-home';
 
+  // Customer Outstanding / Receivables
+  static const String customerOutstanding = '/api/reports/customer-outstanding';
+
   // Push notifications — device token registration (FCM) + per-type preferences
   static const String deviceRegister = '/api/devices/register';
   static const String deviceUnregister = '/api/devices/unregister';
@@ -88,6 +91,7 @@ class ApiConstants {
   // Collections
   static const String collections = '/api/collections';
   static const String collectionReps = '/api/collections/collection-reps';
+  static const String recordPayment = '/api/collections/payment';
   static String collectionStatementPdf(String customerId) => '/api/collections/customer-statement/$customerId/pdf';
   static String collectionStatementWhatsapp(String customerId) => '/api/collections/customer-statement/$customerId/whatsapp';
   static String collectionDetail(String id) => '/api/collections/$id';

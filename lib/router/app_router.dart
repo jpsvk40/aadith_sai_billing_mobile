@@ -16,6 +16,7 @@ import '../features/collections/screens/collection_detail_screen.dart';
 import '../features/collections/screens/collection_list_screen.dart';
 import '../features/collections/screens/collection_payment_screen.dart';
 import '../features/collections/screens/customer_statement_screen.dart';
+import '../features/receivables/screens/receivables_hub_screen.dart';
 import '../data/models/collection_model.dart';
 import '../features/commissions/screens/commission_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
@@ -212,6 +213,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (c, s) => RecordPaymentScreen(
                 initialInvoiceId: s.uri.queryParameters['invoiceId'],
               ),
+            ),
+            GoRoute(
+              path: '/receivables',
+              builder: (c, s) => const ReceivablesHubScreen(),
             ),
             GoRoute(
               path: '/collections',
