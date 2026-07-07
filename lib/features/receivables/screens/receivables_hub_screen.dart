@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../data/network/api_client.dart';
@@ -106,74 +107,122 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Outstanding & Receipts'),
-        elevation: 0,
-        backgroundColor: Colors.white,
+    // Light status-bar icons — the fixed header below is a dark gradient.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F4F6),
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _loading
+                  ? const Center(child: LoadingIndicator())
+                  : _error != null
+                      ? ErrorStateWidget(message: _error!, onRetry: _load)
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: _buildOutstandingTab(),
+                        ),
+            ),
+          ],
+        ),
       ),
-      body: _loading
-          ? const Center(child: LoadingIndicator())
-          : _error != null
-              ? ErrorStateWidget(message: _error!, onRetry: _load)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _buildOutstandingTab(),
-                ),
     );
   }
 
-  // ── TAB 1: Outstanding Bills ──
-  Widget _buildOutstandingTab() {
+  // ── Gradient hero header (title + KPI tiles) — matches the Home dashboard style. ──
+  Widget _buildHeader() {
     final summary = _hubData?['summary'] as Map<String, dynamic>? ?? {};
     final total = (summary['totalOutstanding'] as num?)?.toDouble() ?? 0;
-    final assigned = (summary['assignedOutstanding'] as num?)?.toDouble() ?? 0;
-    final coverage = total > 0 ? ((assigned / total) * 100).toStringAsFixed(1) : '0';
+    final coverage = (summary['coveragePct'] as num?)?.toDouble() ?? 0;
+    final overdue = (summary['overdueAmount'] as num?)?.toDouble() ?? 0;
+    final customers = (summary['totalCustomers'] as num?)?.toInt() ?? 0;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 14, 16, 18),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0369A1), Color(0xFF1D4ED8), Color(0xFF1E1B4B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(22)),
+        boxShadow: [BoxShadow(color: Color(0x331D4ED8), blurRadius: 14, offset: Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Outstanding & Receipts',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              if (customers > 0)
+                Text('$customers customers',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _headerStat('Total Due', _compactInr(total), Colors.white),
+              _headerStat('Coverage', '${coverage % 1 == 0 ? coverage.toStringAsFixed(0) : coverage.toStringAsFixed(1)}%', const Color(0xFF4ADE80)),
+              _headerStat('Overdue', _compactInr(overdue), const Color(0xFFFCA5A5)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _headerStat(String label, String value, Color valueColor) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value, style: TextStyle(color: valueColor, fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 3),
+            Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 10.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact Indian currency for the header tiles (₹40.3L / ₹1.2Cr) — keeps big numbers readable.
+  String _compactInr(double n) {
+    final a = n.abs();
+    if (a >= 10000000) return '₹${(n / 10000000).toStringAsFixed(2)}Cr';
+    if (a >= 100000) return '₹${(n / 100000).toStringAsFixed(2)}L';
+    if (a >= 1000) return '₹${(n / 1000).toStringAsFixed(1)}K';
+    return '₹${n.toStringAsFixed(0)}';
+  }
+
+  // ── Outstanding list (search / lens / rep filters + customer cards). ──
+  Widget _buildOutstandingTab() {
     final filtered = _filterCustomers();
     final filteredTotal = filtered.fold<double>(0, (s, c) => s + ((c['totalOutstanding'] as num?)?.toDouble() ?? 0));
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: Column(
           children: [
-            // Summary cards
-            Container(
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Column(
-                        children: [
-                          const Text('Total Due', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text('₹${fmt(total)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Column(
-                        children: [
-                          const Text('Coverage', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text('$coverage%', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
-                        ],
-                      ),
-                      Column(
-                        children: [
-                          const Text('Overdue', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text('${(summary['unassignedBills'] as num?)?.toInt() ?? 0} bills', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
             // Filters
             Container(
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
