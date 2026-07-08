@@ -132,10 +132,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _attentionHeader(ac),
           const SizedBox(height: 14),
         ],
-        if (mb != null) ...[
-          _execKpis(mb),
-          const SizedBox(height: 20),
-        ],
+        // Quick Access sits up top — the owner's most-used jump-off point.
+        _quickAccess(),
+        const SizedBox(height: 20),
         // Payment approvals waiting on the owner.
         if (o.pendingApprovals > 0) ...[
           _actionQueueBanner(o),
@@ -145,8 +144,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _actionCenter(ac),
           const SizedBox(height: 20),
         ],
-        _quickAccess(),
-        const SizedBox(height: 20),
+        // Money band (Cash / Overdue AR / Payables / Margin) grouped with the P&L below.
+        if (mb != null) ...[
+          _execKpis(mb),
+          const SizedBox(height: 20),
+        ],
         _plCard(o),
         const SizedBox(height: 20),
         // Orders-by-status only makes sense for companies that run the orders module.
