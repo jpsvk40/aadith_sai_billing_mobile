@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../data/models/collection_model.dart';
 import '../../../data/network/api_client.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
@@ -315,7 +317,10 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
                   final unassigned = (c['unassignedOutstanding'] as num?)?.toDouble() ?? 0;
                   final rep = (c['suggestedRep'] as Map?)?.castStringDynamic();
 
-                  return Container(
+                  return InkWell(
+                    onTap: () => _openCustomer(c),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.all(12),
@@ -401,6 +406,7 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
                         ),
                       ],
                     ),
+                    ),
                   );
                 }).toList(),
               ),
@@ -408,6 +414,40 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
         ),
       ),
     );
+  }
+
+  // Tapping a customer row opens their invoice-level statement (same UI as the
+  // Collections customer statement). Each row already carries the per-invoice
+  // breakdown from /customer-outstanding, so no extra fetch is needed.
+  void _openCustomer(Map<String, dynamic> c) {
+    final id = c['customerId'];
+    if (id == null) return;
+    final items = ((c['invoices'] as List?) ?? const []).whereType<Map>().map((m) {
+      final inv = m.cast<String, dynamic>();
+      final total = (inv['grandTotal'] as num?)?.toDouble() ?? 0;
+      final paid = (inv['paidAsOf'] as num?)?.toDouble() ?? 0;
+      final bal = (inv['balanceAsOf'] as num?)?.toDouble() ?? 0;
+      return Collection(
+        id: inv['id']?.toString() ?? '',
+        invoiceId: inv['id']?.toString(),
+        customerId: '$id',
+        customerName: c['customerName'] as String?,
+        invoiceNo: inv['invoiceNo']?.toString(),
+        city: c['city'] as String?,
+        totalOutstanding: total,
+        collectedAmount: paid,
+        balanceAmount: bal,
+        status: bal <= 0 ? 'Collected' : (paid > 0 ? 'Partial' : 'Pending'),
+        dueDate: inv['dueDate'] != null ? DateTime.tryParse('${inv['dueDate']}') : null,
+      );
+    }).toList();
+    context.push('/receivables/statement/$id', extra: {
+      'customerName': c['customerName'] ?? 'Customer',
+      'customerNameTa': c['customerNameTa'],
+      'city': c['city'],
+      'phone': c['whatsapp'] ?? c['phone'],
+      'items': items,
+    });
   }
 
   // ── Dialogs ──

@@ -218,6 +218,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               path: '/receivables',
               builder: (c, s) => const ReceivablesHubScreen(),
             ),
+            // Per-customer invoice detail opened from an Outstanding row. A twin of
+            // /collections/statement/:id, but under /receivables so it is NOT gated to
+            // the collections module (the Outstanding hub itself is ungated).
+            GoRoute(
+              path: '/receivables/statement/:id',
+              builder: (c, s) {
+                final e = s.extra as Map<String, dynamic>?;
+                return CustomerStatementScreen(
+                  customerId: s.pathParameters['id']!,
+                  customerName: (e?['customerName'] as String?) ?? 'Customer',
+                  customerNameTa: e?['customerNameTa'] as String?,
+                  city: e?['city'] as String?,
+                  phone: e?['phone'] as String?,
+                  items: (e?['items'] as List?)?.cast<Collection>() ?? const [],
+                );
+              },
+            ),
             GoRoute(
               path: '/collections',
               builder: (c, s) => const CollectionListScreen(),
