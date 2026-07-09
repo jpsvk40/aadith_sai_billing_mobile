@@ -66,6 +66,8 @@ class ApiConstants {
   static const String aiAssistantBrief = '/api/ai-assistant/brief';
   static const String aiAssistantAsk = '/api/ai-assistant/ask';
   static const String aiAssistantTranscribe = '/api/ai-assistant/transcribe';
+  static const String aiAssistantConsent = '/api/ai-assistant/consent'; // grant AI data-sharing consent
+  static const String aiAssistantConsentRevoke = '/api/ai-assistant/consent/revoke';
 
   // Mobile home (role-aware overview: financials + activity feed)
   static const String mobileHome = '/api/reports/mobile-home';

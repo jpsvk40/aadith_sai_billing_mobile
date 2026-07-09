@@ -11,6 +11,19 @@ class AiAssistantRepository {
     return AssistantStatus.fromJson(_asMap(data));
   }
 
+  /// Records the user's consent to share data with the third-party AI providers (OpenAI + Sarvam).
+  Future<void> grantConsent({String? version}) async {
+    await _client.post(ApiConstants.aiAssistantConsent, data: {
+      if (version != null) 'version': version,
+      'client': 'mobile',
+    });
+  }
+
+  /// Withdraws consent — the server then refuses /ask + /transcribe until the user agrees again.
+  Future<void> revokeConsent() async {
+    await _client.post(ApiConstants.aiAssistantConsentRevoke, data: {});
+  }
+
   /// The proactive "morning brief" — a direct read (no LLM), shown when the assistant opens.
   Future<BusinessBrief> brief() async {
     final data = await _client.get(ApiConstants.aiAssistantBrief);

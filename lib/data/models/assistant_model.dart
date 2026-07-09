@@ -4,13 +4,35 @@ class AssistantStatus {
   final bool enabled; // company entitled (paid feature)
   final bool configured; // server has the LLM key
   final bool voiceConfigured; // server has the Sarvam key
+  final bool consentGranted; // user agreed to share data with OpenAI/Sarvam (App Store 5.1.1)
+  final String? consentVersion; // current disclosure version the client should send on agree
 
-  const AssistantStatus({this.enabled = false, this.configured = false, this.voiceConfigured = false});
+  const AssistantStatus({
+    this.enabled = false,
+    this.configured = false,
+    this.voiceConfigured = false,
+    this.consentGranted = true, // old backend w/o `consent` → don't block
+    this.consentVersion,
+  });
 
-  factory AssistantStatus.fromJson(Map<String, dynamic> json) => AssistantStatus(
-        enabled: json['enabled'] == true,
-        configured: json['configured'] == true,
-        voiceConfigured: json['voiceConfigured'] == true,
+  factory AssistantStatus.fromJson(Map<String, dynamic> json) {
+    final c = json['consent'];
+    final consent = c is Map ? c : const <String, dynamic>{};
+    return AssistantStatus(
+      enabled: json['enabled'] == true,
+      configured: json['configured'] == true,
+      voiceConfigured: json['voiceConfigured'] == true,
+      consentGranted: consent.isEmpty ? true : consent['granted'] == true,
+      consentVersion: consent['version']?.toString(),
+    );
+  }
+
+  AssistantStatus copyWith({bool? consentGranted}) => AssistantStatus(
+        enabled: enabled,
+        configured: configured,
+        voiceConfigured: voiceConfigured,
+        consentGranted: consentGranted ?? this.consentGranted,
+        consentVersion: consentVersion,
       );
 }
 

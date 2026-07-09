@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/network/api_client.dart';
 import '../../../data/models/assistant_model.dart';
@@ -63,6 +64,7 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
   AssistantStatus? _status;
   bool _loadingStatus = true;
   bool _sending = false;
+  bool _agreeing = false; // AI data-sharing consent request in flight
   final List<AssistantTurn> _turns = [];
 
   BusinessBrief? _brief; // proactive digest shown on open (no LLM)
@@ -376,10 +378,41 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
     try {
       final s = await _repo.status();
       if (mounted) setState(() { _status = s; _loadingStatus = false; });
-      // Once we know the feature is live, pull the proactive brief to greet the user with it.
-      if (s.enabled && s.configured) _loadBrief();
+      // Only greet with the brief once the feature is live AND the user has consented to AI sharing.
+      if (s.enabled && s.configured && s.consentGranted) _loadBrief();
     } catch (_) {
       if (mounted) setState(() { _status = const AssistantStatus(); _loadingStatus = false; });
+    }
+  }
+
+  // ── AI data-sharing consent (App Store 5.1.1(i)/5.1.2(i)) ──
+  Future<void> _grantConsent() async {
+    if (_agreeing) return;
+    setState(() => _agreeing = true);
+    try {
+      await _repo.grantConsent(version: _status?.consentVersion);
+      if (mounted) setState(() => _status = _status?.copyWith(consentGranted: true));
+      _loadBrief(); // now safe to greet
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save your choice. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _agreeing = false);
+    }
+  }
+
+  Future<void> _revokeConsent() async {
+    try {
+      await _repo.revokeConsent();
+      if (mounted) setState(() => _status = _status?.copyWith(consentGranted: false));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update. Please try again.')));
+    }
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -493,13 +526,104 @@ class _AskBusinessScreenState extends ConsumerState<AskBusinessScreen> {
               if (!_speakAnswers) _tts.stop();
             },
           ),
+          // Data-sharing controls: privacy policy + withdraw consent (shown once consented).
+          if (_status?.enabled == true)
+            PopupMenuButton<String>(
+              tooltip: 'AI data sharing',
+              icon: const Icon(Icons.privacy_tip_outlined),
+              onSelected: (v) {
+                if (v == 'privacy') _openUrl('https://www.aadithsaibillingcloud.com/privacy');
+                if (v == 'withdraw') _revokeConsent();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'privacy', child: Text('View Privacy Policy')),
+                if (_status?.consentGranted == true)
+                  const PopupMenuItem(value: 'withdraw', child: Text('Withdraw AI data sharing')),
+              ],
+            ),
         ],
       ),
       body: _loadingStatus
           ? const Center(child: CircularProgressIndicator())
-          : (_status?.enabled != true ? _locked() : _chat()),
+          : (_status?.enabled != true
+              ? _locked()
+              : (_status?.consentGranted == false ? _consentGate() : _chat())),
     );
   }
+
+  // AI data-sharing consent gate — the assistant stays blocked until the user agrees.
+  Widget _consentGate() {
+    const ink = Color(0xFF0F172A);
+    const body = Color(0xFF334155);
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(children: [
+              Icon(Icons.lock_outline, size: 22, color: Color(0xFF4F46E5)),
+              SizedBox(width: 8),
+              Expanded(child: Text('Before you use the assistant',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: ink))),
+            ]),
+            const SizedBox(height: 14),
+            const Text('To answer you, “Ask your business” shares data with third-party AI providers:',
+                style: TextStyle(fontSize: 14, color: body, height: 1.5)),
+            const SizedBox(height: 12),
+            _consentBullet('Your typed questions and the business data needed to answer (e.g. invoices, customers, products, payments, outstanding) go to OpenAI (USA), which generates the answer.'),
+            _consentBullet('Any voice recordings you make go to Sarvam AI, which converts your speech to text.'),
+            const SizedBox(height: 6),
+            const Text('This data is used only to answer your request and is never sold. Both providers are contractually required to protect it. You can withdraw consent anytime from the assistant.',
+                style: TextStyle(fontSize: 13, color: body, height: 1.5)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => _openUrl('https://www.aadithsaibillingcloud.com/privacy'),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Text('View Privacy Policy',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF4F46E5), fontWeight: FontWeight.w600, decoration: TextDecoration.underline)),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _agreeing ? null : _grantConsent,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(_agreeing ? 'Saving…' : 'I Agree & Continue',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
+                child: const Text('Not now'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _consentBullet(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(padding: EdgeInsets.only(top: 6, right: 8), child: Icon(Icons.circle, size: 6, color: Color(0xFF64748B))),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 13.5, color: Color(0xFF334155), height: 1.45))),
+          ],
+        ),
+      );
 
   Widget _locked() => Center(
         child: Padding(
