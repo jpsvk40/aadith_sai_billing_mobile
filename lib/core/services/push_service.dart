@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -38,14 +39,14 @@ class PushService {
     if (_inited) return;
     _inited = true;
     try {
-      print('[PushService] Initializing Firebase...');
+      debugPrint('[PushService] Initializing Firebase...');
       await Firebase.initializeApp();
       _available = true;
-      print('[PushService] Firebase initialized successfully');
+      debugPrint('[PushService] Firebase initialized successfully');
     } catch (e) {
       // Firebase not configured (credentials not added yet) — push stays inert.
       _available = false;
-      print('[PushService] Firebase initialization failed: $e');
+      debugPrint('[PushService] Firebase initialization failed: $e');
       return;
     }
 
@@ -89,25 +90,25 @@ class PushService {
   /// the backend so alerts fan out to it, and keeps it current on refresh.
   Future<void> registerToken() async {
     if (!_available) {
-      print('[PushService] Firebase not available, skipping token registration');
+      debugPrint('[PushService] Firebase not available, skipping token registration');
       return;
     }
     try {
       final token = await FirebaseMessaging.instance.getToken();
       if (token == null) {
-        print('[PushService] Failed to obtain FCM token (null)');
+        debugPrint('[PushService] Failed to obtain FCM token (null)');
         return;
       }
       _token = token;
-      print('[PushService] Obtained FCM token: ${token.substring(0, 20)}...');
+      debugPrint('[PushService] Obtained FCM token: ${token.substring(0, 20)}...');
       await _send(token);
       FirebaseMessaging.instance.onTokenRefresh.listen((t) {
         _token = t;
-        print('[PushService] Token refreshed: ${t.substring(0, 20)}...');
+        debugPrint('[PushService] Token refreshed: ${t.substring(0, 20)}...');
         _send(t);
       });
     } catch (e) {
-      print('[PushService] Failed to register token: $e');
+      debugPrint('[PushService] Failed to register token: $e');
     }
   }
 
@@ -118,9 +119,9 @@ class PushService {
         'token': token,
         'platform': Platform.isIOS ? 'ios' : 'android',
       });
-      print('[PushService] Device token registered with backend');
+      debugPrint('[PushService] Device token registered with backend');
     } catch (e) {
-      print('[PushService] Failed to register token with backend: $e');
+      debugPrint('[PushService] Failed to register token with backend: $e');
     }
   }
 
