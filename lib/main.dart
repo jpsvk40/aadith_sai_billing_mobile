@@ -52,9 +52,9 @@ class _BootstrapAppState extends State<BootstrapApp> {
       StartupDiagnostics.reportAsync(_stage);
       await CacheStorage.init().timeout(const Duration(seconds: 10));
 
-      // Push notifications (FCM) — fire-and-forget so it can NEVER block the first
-      // frame. No-ops silently if Firebase isn't configured yet.
-      unawaited(PushService.instance.init());
+      setState(() => _stage = 'Initializing push notifications...');
+      StartupDiagnostics.reportAsync(_stage);
+      await PushService.instance.init().timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
       setState(() {

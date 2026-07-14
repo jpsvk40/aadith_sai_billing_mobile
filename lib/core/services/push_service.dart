@@ -38,11 +38,14 @@ class PushService {
     if (_inited) return;
     _inited = true;
     try {
+      print('[PushService] Initializing Firebase...');
       await Firebase.initializeApp();
       _available = true;
-    } catch (_) {
+      print('[PushService] Firebase initialized successfully');
+    } catch (e) {
       // Firebase not configured (credentials not added yet) — push stays inert.
       _available = false;
+      print('[PushService] Firebase initialization failed: $e');
       return;
     }
 
@@ -85,17 +88,27 @@ class PushService {
   /// Called after login / session restore. Registers this device's FCM token with
   /// the backend so alerts fan out to it, and keeps it current on refresh.
   Future<void> registerToken() async {
-    if (!_available) return;
+    if (!_available) {
+      print('[PushService] Firebase not available, skipping token registration');
+      return;
+    }
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token == null) return;
+      if (token == null) {
+        print('[PushService] Failed to obtain FCM token (null)');
+        return;
+      }
       _token = token;
+      print('[PushService] Obtained FCM token: ${token.substring(0, 20)}...');
       await _send(token);
       FirebaseMessaging.instance.onTokenRefresh.listen((t) {
         _token = t;
+        print('[PushService] Token refreshed: ${t.substring(0, 20)}...');
         _send(t);
       });
-    } catch (_) {/* offline / permission denied — try again next launch */}
+    } catch (e) {
+      print('[PushService] Failed to register token: $e');
+    }
   }
 
   Future<void> _send(String token) async {
@@ -105,7 +118,10 @@ class PushService {
         'token': token,
         'platform': Platform.isIOS ? 'ios' : 'android',
       });
-    } catch (_) {/* best-effort */}
+      print('[PushService] Device token registered with backend');
+    } catch (e) {
+      print('[PushService] Failed to register token with backend: $e');
+    }
   }
 
   /// Called on logout — stop delivering to this device.
