@@ -59,29 +59,53 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
     if (_busyPdf) return;
     setState(() => _busyPdf = true);
     final messenger = ScaffoldMessenger.of(context);
+    // Anchor rect for the iOS share sheet — REQUIRED on iPad (the sheet throws a
+    // PlatformException without it) and harmless elsewhere. Captured before any await.
+    final origin = _shareOrigin();
     messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
+
+    // ── 1. Download + save. A failure here is a download/render problem. ──
+    File file;
     try {
       final bytes = await _client.getBytes(
         ApiConstants.collectionStatementPdf(widget.customerId),
         timeout: const Duration(seconds: 90),
       );
-      if (bytes.isEmpty) throw Exception('Empty PDF');
+      if (bytes.isEmpty) throw Exception('the server returned an empty file');
       final dir = await getTemporaryDirectory();
       final safe = widget.customerName.replaceAll(RegExp(r'[^\w.-]'), '_');
-      final file = File('${dir.path}/Statement_$safe.pdf');
+      file = File('${dir.path}/Statement_$safe.pdf');
       await file.writeAsBytes(bytes, flush: true);
-      messenger.hideCurrentSnackBar();
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Collection statement — ${widget.customerName}',
-      );
     } catch (e) {
       messenger.hideCurrentSnackBar();
       final raw = (e is AppException) ? e.message : e.toString();
-      messenger.showSnackBar(SnackBar(content: Text(raw.isNotEmpty ? 'Could not prepare PDF: $raw' : 'Could not prepare the PDF.')));
+      messenger.showSnackBar(SnackBar(content: Text('Could not download the statement: ${raw.isNotEmpty ? raw : 'unknown error'}')));
+      if (mounted) setState(() => _busyPdf = false);
+      return;
+    }
+
+    // ── 2. Share. The PDF is already on disk; a failure here is a share-sheet
+    // problem (e.g. iPad needing an anchor), reported distinctly so it is not
+    // mistaken for a download failure. ──
+    messenger.hideCurrentSnackBar();
+    try {
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Collection statement — ${widget.customerName}',
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('PDF ready but the share sheet could not open: $e')));
     } finally {
       if (mounted) setState(() => _busyPdf = false);
     }
+  }
+
+  /// Screen rect to anchor the iOS/iPad share popover to.
+  Rect? _shareOrigin() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
   }
 
   /// Ask which number to send to — prefilled with the customer's, but editable so

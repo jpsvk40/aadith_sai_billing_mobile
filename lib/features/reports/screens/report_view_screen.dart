@@ -306,20 +306,36 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     if (_busyPdf || _visible.isEmpty) return;
     setState(() => _busyPdf = true);
     final messenger = ScaffoldMessenger.of(context);
+    // Anchor rect for the iOS/iPad share sheet (required on iPad, harmless elsewhere).
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = (box != null && box.hasSize) ? box.localToGlobal(Offset.zero) & box.size : null;
     messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
+
+    File file;
     try {
       final bytes = await _client.postBytes(ApiConstants.reportRenderPdf, data: _payload(), timeout: const Duration(seconds: 90));
-      if (bytes.isEmpty) throw Exception('Empty PDF');
+      if (bytes.isEmpty) throw Exception('the server returned an empty file');
       final dir = await getTemporaryDirectory();
       final safe = widget.config.title.replaceAll(RegExp(r'[^\w.-]'), '_');
-      final file = File('${dir.path}/Report_$safe.pdf');
+      file = File('${dir.path}/Report_$safe.pdf');
       await file.writeAsBytes(bytes, flush: true);
-      messenger.hideCurrentSnackBar();
-      await Share.shareXFiles([XFile(file.path, mimeType: 'application/pdf')], text: '${widget.config.title} report');
     } catch (e) {
       messenger.hideCurrentSnackBar();
       final raw = (e is AppException) ? e.message : e.toString();
-      messenger.showSnackBar(SnackBar(content: Text(raw.isNotEmpty ? 'Could not prepare PDF: $raw' : 'Could not prepare the PDF.')));
+      messenger.showSnackBar(SnackBar(content: Text('Could not download the report: ${raw.isNotEmpty ? raw : 'unknown error'}')));
+      if (mounted) setState(() => _busyPdf = false);
+      return;
+    }
+
+    messenger.hideCurrentSnackBar();
+    try {
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: '${widget.config.title} report',
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('PDF ready but the share sheet could not open: $e')));
     } finally {
       if (mounted) setState(() => _busyPdf = false);
     }
