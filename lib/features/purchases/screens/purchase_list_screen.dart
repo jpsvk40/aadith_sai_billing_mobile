@@ -225,7 +225,10 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
   Widget _purchaseCard(VendorPurchase p) {
     final sc = _statusColor(p.status);
     final due = p.outstandingAmount;
-    return Container(
+    return InkWell(
+      onTap: () => context.push('/purchases/${p.id}'),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -282,6 +285,7 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

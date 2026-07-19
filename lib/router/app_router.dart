@@ -29,6 +29,7 @@ import '../features/payments/screens/payment_list_screen.dart';
 import '../features/payments/screens/record_payment_screen.dart';
 import '../features/purchases/screens/purchase_list_screen.dart';
 import '../features/purchases/screens/purchase_create_screen.dart';
+import '../features/purchases/screens/purchase_detail_screen.dart';
 import '../features/customers/screens/customer_list_screen.dart';
 import '../features/customers/screens/customer_form_screen.dart';
 import '../data/models/customer_model.dart';
@@ -167,6 +168,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
             GoRoute(path: '/purchases', builder: (c, s) => const PurchaseListScreen()),
             GoRoute(path: '/purchases/create', builder: (c, s) => PurchaseCreateScreen(prefill: s.extra as PurchasePrefill?)),
+            GoRoute(path: '/purchases/:id', builder: (c, s) => PurchaseDetailScreen(purchaseId: s.pathParameters['id']!)),
             GoRoute(path: '/site-logistics', builder: (c, s) => const SiteLogisticsScreen()),
             GoRoute(path: '/site-logistics/survey', builder: (c, s) => const SurveyFormScreen()),
             GoRoute(path: '/site-logistics/delivery', builder: (c, s) => const DeliveryFormScreen()),

@@ -67,6 +67,16 @@ class VendorPurchaseRepository {
         : data as Map<String, dynamic>);
   }
 
+  /// Full bill with its line items (GET /vendor-purchases/:id). The endpoint returns
+  /// the purchase object directly (spread), so no unwrap key is needed.
+  Future<VendorPurchase> getPurchaseDetail(String id) async {
+    final data = await _client.get(ApiConstants.vendorPurchaseDetail(id));
+    final map = (data is Map && data['purchase'] is Map)
+        ? (data['purchase'] as Map).cast<String, dynamic>()
+        : (data as Map).cast<String, dynamic>();
+    return VendorPurchase.fromJson(map);
+  }
+
   /// Reference pricing for a product (+ optional vendor): current selling price,
   /// last price from this vendor, and last price from any vendor.
   Future<Map<String, dynamic>?> priceHint({required String productId, String? vendorId}) async {

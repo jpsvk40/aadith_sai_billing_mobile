@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/api_constants.dart';
@@ -262,7 +263,14 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
   Widget _invoiceRow(Collection c) {
     final sc = _statusColor(c.status);
     final overdue = c.dueDate != null && c.dueDate!.isBefore(DateTime.now()) && c.balanceAmount > 0;
-    return Container(
+    // Tapping an invoice opens its full detail (line items) — the invoice id rides
+    // on the Collection from the Outstanding hub. Rows without an id stay static.
+    final invoiceId = c.invoiceId ?? '';
+    final tappable = invoiceId.isNotEmpty;
+    return InkWell(
+      onTap: tappable ? () => context.push('/invoices/$invoiceId') : null,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -279,6 +287,10 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
             decoration: BoxDecoration(color: sc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
             child: Text(c.status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: sc)),
           ),
+          if (tappable) const Padding(
+            padding: EdgeInsets.only(left: 6),
+            child: Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          ),
         ]),
         if (overdue) ...[
           const SizedBox(height: 6),
@@ -291,6 +303,7 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
           _metric('Balance', CurrencyUtils.format(c.balanceAmount), color: c.balanceAmount > 0 ? AppColors.danger : AppColors.success),
         ]),
       ]),
+      ),
     );
   }
 
