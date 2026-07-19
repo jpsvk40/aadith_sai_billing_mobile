@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/errors/app_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/pdf_share.dart';
 import '../../../data/models/invoice_model.dart';
 import '../../../data/network/api_client.dart';
 import '../../../data/repositories/invoice_repository.dart';
@@ -33,6 +35,19 @@ class InvoiceDetailScreen extends ConsumerWidget {
       default:
         return AppColors.info;
     }
+  }
+
+  /// Download this invoice (GST bill) as a server-rendered PDF and open the share sheet.
+  Future<void> _downloadPdf(BuildContext context, WidgetRef ref) async {
+    final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
+    final inv = ref.read(invoiceDetailProvider(invoiceId)).valueOrNull;
+    final docNo = (inv?.invoiceNumber.isNotEmpty ?? false) ? inv!.invoiceNumber : invoiceId;
+    await downloadAndSharePdf(
+      context,
+      fetch: () => client.getBytes(ApiConstants.invoicePdf(invoiceId), timeout: const Duration(seconds: 90)),
+      filename: 'Invoice_$docNo.pdf',
+      shareText: 'Invoice $docNo',
+    );
   }
 
   Future<void> _sendWhatsApp(BuildContext context, WidgetRef ref) async {
@@ -69,6 +84,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/invoices')),
         title: const Text('Invoice Detail'),
         actions: [
+          IconButton(
+            tooltip: 'Download / share PDF',
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.white),
+            onPressed: () => _downloadPdf(context, ref),
+          ),
           IconButton(
             tooltip: 'Send on WhatsApp',
             icon: const FaIcon(FontAwesomeIcons.whatsapp, color: AppColors.white, size: 20),

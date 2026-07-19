@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/errors/app_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/utils/pdf_share.dart';
 import '../../../data/network/api_client.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
@@ -305,41 +303,13 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
   Future<void> _sharePdf() async {
     if (_busyPdf || _visible.isEmpty) return;
     setState(() => _busyPdf = true);
-    final messenger = ScaffoldMessenger.of(context);
-    // Anchor rect for the iOS share sheet — iOS rejects a zero/unset origin (even on
-    // iPhone), so always pass a small NON-zero rect strictly inside the view.
-    final mqSize = MediaQuery.of(context).size;
-    final origin = Rect.fromCenter(center: Offset(mqSize.width / 2, mqSize.height / 2), width: 1, height: 1);
-    messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
-
-    File file;
-    try {
-      final bytes = await _client.postBytes(ApiConstants.reportRenderPdf, data: _payload(), timeout: const Duration(seconds: 90));
-      if (bytes.isEmpty) throw Exception('the server returned an empty file');
-      final dir = await getTemporaryDirectory();
-      final safe = widget.config.title.replaceAll(RegExp(r'[^\w.-]'), '_');
-      file = File('${dir.path}/Report_$safe.pdf');
-      await file.writeAsBytes(bytes, flush: true);
-    } catch (e) {
-      messenger.hideCurrentSnackBar();
-      final raw = (e is AppException) ? e.message : e.toString();
-      messenger.showSnackBar(SnackBar(content: Text('Could not download the report: ${raw.isNotEmpty ? raw : 'unknown error'}')));
-      if (mounted) setState(() => _busyPdf = false);
-      return;
-    }
-
-    messenger.hideCurrentSnackBar();
-    try {
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: '${widget.config.title} report',
-        sharePositionOrigin: origin,
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('PDF ready but the share sheet could not open: $e')));
-    } finally {
-      if (mounted) setState(() => _busyPdf = false);
-    }
+    await downloadAndSharePdf(
+      context,
+      fetch: () => _client.postBytes(ApiConstants.reportRenderPdf, data: _payload(), timeout: const Duration(seconds: 90)),
+      filename: 'Report_${widget.config.title}.pdf',
+      shareText: '${widget.config.title} report',
+    );
+    if (mounted) setState(() => _busyPdf = false);
   }
 
   Future<String?> _promptNumber() async {

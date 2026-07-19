@@ -1,14 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/errors/app_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/utils/pdf_share.dart';
 import '../../../data/models/collection_model.dart';
 import '../../../data/network/api_client.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -58,56 +56,16 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
   Future<void> _sharePdf() async {
     if (_busyPdf) return;
     setState(() => _busyPdf = true);
-    final messenger = ScaffoldMessenger.of(context);
-    // Anchor rect for the iOS share sheet — REQUIRED on iPad (the sheet throws a
-    // PlatformException without it) and harmless elsewhere. Captured before any await.
-    final origin = _shareOrigin();
-    messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
-
-    // ── 1. Download + save. A failure here is a download/render problem. ──
-    File file;
-    try {
-      final bytes = await _client.getBytes(
+    await downloadAndSharePdf(
+      context,
+      fetch: () => _client.getBytes(
         ApiConstants.collectionStatementPdf(widget.customerId),
         timeout: const Duration(seconds: 90),
-      );
-      if (bytes.isEmpty) throw Exception('the server returned an empty file');
-      final dir = await getTemporaryDirectory();
-      final safe = widget.customerName.replaceAll(RegExp(r'[^\w.-]'), '_');
-      file = File('${dir.path}/Statement_$safe.pdf');
-      await file.writeAsBytes(bytes, flush: true);
-    } catch (e) {
-      messenger.hideCurrentSnackBar();
-      final raw = (e is AppException) ? e.message : e.toString();
-      messenger.showSnackBar(SnackBar(content: Text('Could not download the statement: ${raw.isNotEmpty ? raw : 'unknown error'}')));
-      if (mounted) setState(() => _busyPdf = false);
-      return;
-    }
-
-    // ── 2. Share. The PDF is already on disk; a failure here is a share-sheet
-    // problem (e.g. iPad needing an anchor), reported distinctly so it is not
-    // mistaken for a download failure. ──
-    messenger.hideCurrentSnackBar();
-    try {
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Collection statement — ${widget.customerName}',
-        sharePositionOrigin: origin,
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('PDF ready but the share sheet could not open: $e')));
-    } finally {
-      if (mounted) setState(() => _busyPdf = false);
-    }
-  }
-
-  /// Anchor rect for the iOS share sheet. iOS rejects a zero/unset origin
-  /// (PlatformException: "sharePositionOrigin ... must be non-zero and within
-  /// coordinate space of source view") — even on iPhone with newer share_plus —
-  /// so we always return a small NON-zero rect strictly inside the view.
-  Rect _shareOrigin() {
-    final size = MediaQuery.of(context).size;
-    return Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1);
+      ),
+      filename: 'Statement_${widget.customerName}.pdf',
+      shareText: 'Collection statement — ${widget.customerName}',
+    );
+    if (mounted) setState(() => _busyPdf = false);
   }
 
   /// Ask which number to send to — prefilled with the customer's, but editable so

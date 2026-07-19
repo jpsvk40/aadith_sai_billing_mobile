@@ -45,6 +45,7 @@ class ApiConstants {
   // Invoices
   static const String invoices = '/api/invoices';
   static String invoiceDetail(String id) => '/api/invoices/$id';
+  static String invoicePdf(String id) => '/api/invoices/$id/pdf';
 
   // Payments
   static const String payments = '/api/payments';
