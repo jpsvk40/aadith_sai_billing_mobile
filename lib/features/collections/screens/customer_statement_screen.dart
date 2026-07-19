@@ -101,11 +101,13 @@ class _CustomerStatementScreenState extends ConsumerState<CustomerStatementScree
     }
   }
 
-  /// Screen rect to anchor the iOS/iPad share popover to.
-  Rect? _shareOrigin() {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return null;
-    return box.localToGlobal(Offset.zero) & box.size;
+  /// Anchor rect for the iOS share sheet. iOS rejects a zero/unset origin
+  /// (PlatformException: "sharePositionOrigin ... must be non-zero and within
+  /// coordinate space of source view") — even on iPhone with newer share_plus —
+  /// so we always return a small NON-zero rect strictly inside the view.
+  Rect _shareOrigin() {
+    final size = MediaQuery.of(context).size;
+    return Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: 1, height: 1);
   }
 
   /// Ask which number to send to — prefilled with the customer's, but editable so

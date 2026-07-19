@@ -306,9 +306,10 @@ class _ReportViewScreenState extends ConsumerState<ReportViewScreen> {
     if (_busyPdf || _visible.isEmpty) return;
     setState(() => _busyPdf = true);
     final messenger = ScaffoldMessenger.of(context);
-    // Anchor rect for the iOS/iPad share sheet (required on iPad, harmless elsewhere).
-    final box = context.findRenderObject() as RenderBox?;
-    final origin = (box != null && box.hasSize) ? box.localToGlobal(Offset.zero) & box.size : null;
+    // Anchor rect for the iOS share sheet — iOS rejects a zero/unset origin (even on
+    // iPhone), so always pass a small NON-zero rect strictly inside the view.
+    final mqSize = MediaQuery.of(context).size;
+    final origin = Rect.fromCenter(center: Offset(mqSize.width / 2, mqSize.height / 2), width: 1, height: 1);
     messenger.showSnackBar(const SnackBar(content: Text('Preparing PDF…')));
 
     File file;
