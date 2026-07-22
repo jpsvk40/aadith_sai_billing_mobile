@@ -48,9 +48,6 @@ workflows:
       # The earlier "module not found" failures were a pod-integration bug (fixed by
       # building via `flutter build ios`), not Xcode 26 itself.
       xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.aadithsai.aadithSaiBillingMobile
     triggering:
       branch_patterns:
         - pattern: main
@@ -74,11 +71,17 @@ workflows:
           flutter test
       - name: Set up code signing
         script: |
-          # environment.ios_signing (distribution_type + bundle_identifier) auto-fetches the
-          # distribution cert + provisioning profile for this bundle id under the SkillTrackr LLC
-          # team via the "SkillTrackr LLC" ASC integration and initializes the keychain; then
-          # use-profiles writes them into the Xcode project. project.pbxproj no longer hardcodes a
-          # profile name (PROVISIONING_PROFILE_SPECIFIER cleared) so nothing conflicts.
+          # The declarative ios_signing block only FETCHES existing signing files; after the old
+          # uploaded cert/profile were deleted it failed with "no matching certificate". So create
+          # fresh ones via the API: fetch-signing-files --create makes a NEW Apple Distribution
+          # certificate (with private key) AND an App Store provisioning profile under the
+          # SkillTrackr LLC team (via the "SkillTrackr LLC" ASC integration), then apply them.
+          # project.pbxproj no longer pins a profile name, so there is nothing to conflict.
+          keychain initialize
+          app-store-connect fetch-signing-files "com.aadithsai.aadithSaiBillingMobile" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
           xcode-project use-profiles
       - name: Set up Flutter iOS + pods
         script: |
