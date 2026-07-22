@@ -39,7 +39,7 @@ workflows:
     max_build_duration: 90
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: aadith-appstore
+      app_store_connect: SkillTrackr LLC
     environment:
       groups:
         - app_store   # imports APP_STORE_APPLE_ID + APP_STORE_CONNECT_* keys used by the build-number auto-bump
@@ -48,11 +48,6 @@ workflows:
       # The earlier "module not found" failures were a pod-integration bug (fixed by
       # building via `flutter build ios`), not Xcode 26 itself.
       xcode: latest
-      ios_signing:
-        certificates:
-          - aadith sai billing
-        provisioning_profiles:
-          - aadith-sai-billing-profile
     triggering:
       branch_patterns:
         - pattern: main
@@ -76,6 +71,15 @@ workflows:
           flutter test
       - name: Set up code signing
         script: |
+          # Auto-fetch signing under the SkillTrackr LLC team via the App Store Connect API key
+          # (the "SkillTrackr LLC" integration). --create makes a new distribution certificate +
+          # provisioning profile under the new team if none exist — replaces the old manually
+          # uploaded old-team files (ios_signing block removed).
+          keychain initialize
+          app-store-connect fetch-signing-files "com.aadithsai.aadithSaiBillingMobile" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
           xcode-project use-profiles
       - name: Set up Flutter iOS + pods
         script: |
