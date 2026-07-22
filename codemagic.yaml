@@ -42,7 +42,7 @@ workflows:
       app_store_connect: SkillTrackr LLC
     environment:
       groups:
-        - app_store   # imports APP_STORE_APPLE_ID + APP_STORE_CONNECT_* keys used by the build-number auto-bump
+        - app_store   # APP_STORE_APPLE_ID (build-number bump) + CERTIFICATE_PRIVATE_KEY (RSA key that mints/reuses the dist cert)
       flutter: stable
       # Apple requires apps built with the iOS 26 SDK (Xcode 26+) for App Store uploads.
       # The earlier "module not found" failures were a pod-integration bug (fixed by
@@ -71,15 +71,17 @@ workflows:
           flutter test
       - name: Set up code signing
         script: |
-          # The declarative ios_signing block only FETCHES existing signing files; after the old
-          # uploaded cert/profile were deleted it failed with "no matching certificate". So create
-          # fresh ones via the API: fetch-signing-files --create makes a NEW Apple Distribution
-          # certificate (with private key) AND an App Store provisioning profile under the
-          # SkillTrackr LLC team (via the "SkillTrackr LLC" ASC integration), then apply them.
+          # fetch-signing-files --create does NOT generate a distribution certificate on its own
+          # ("Cannot save Signing Certificates without certificate private key"). Feed it a stable
+          # RSA private key (Codemagic secret CERTIFICATE_PRIVATE_KEY, group app_store): on the
+          # first run it creates ONE Apple Distribution certificate for that key under the
+          # SkillTrackr LLC team; every later run finds the same cert by its key and REUSES it (no
+          # cert-limit growth). --create also makes the App Store provisioning profile if missing.
           # project.pbxproj no longer pins a profile name, so there is nothing to conflict.
           keychain initialize
           app-store-connect fetch-signing-files "com.aadithsai.aadithSaiBillingMobile" \
             --type IOS_APP_STORE \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
             --create
           keychain add-certificates
           xcode-project use-profiles
