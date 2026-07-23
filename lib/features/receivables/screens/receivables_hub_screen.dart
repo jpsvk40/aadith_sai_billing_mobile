@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/utils/pdf_share.dart';
 import '../../../data/models/collection_model.dart';
 import '../../../data/network/api_client.dart';
 import '../../../widgets/common/error_state_widget.dart';
@@ -402,6 +403,20 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 10),
+                            // Print every one of this customer's outstanding bills as ONE PDF, then share.
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _printBills(c),
+                                icon: const Icon(Icons.receipt_long, size: 16),
+                                label: const Text('Bills', style: TextStyle(fontSize: 11)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4338CA),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -599,6 +614,33 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+  }
+
+  // Gather this customer's outstanding invoice IDs and fetch ONE combined PDF from the backend
+  // (all their full bills, one per page), then open the share sheet.
+  Future<void> _printBills(Map<String, dynamic> customer) async {
+    final invoiceIds = ((customer['invoices'] as List?) ?? const [])
+        .whereType<Map>()
+        .where((inv) => ((inv['balanceAsOf'] as num?)?.toDouble() ?? 0) > 0)
+        .map((inv) => inv['id'])
+        .where((id) => id != null)
+        .toList();
+    if (invoiceIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No outstanding bills to print')));
+      return;
+    }
+    final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
+    final name = customer['customerName'] as String? ?? 'Customer';
+    await downloadAndSharePdf(
+      context,
+      fetch: () => client.postBytes(
+        ApiConstants.invoicesPrintBatchPdf,
+        data: {'invoiceIds': invoiceIds},
+        timeout: const Duration(seconds: 120), // batch PDF render can be slow on a cold server
+      ),
+      filename: 'Bills_${name}_${invoiceIds.length}.pdf',
+      shareText: '${invoiceIds.length} invoice(s) — $name',
+    );
   }
 }
 

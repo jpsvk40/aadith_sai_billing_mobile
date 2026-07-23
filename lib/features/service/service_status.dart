@@ -7,17 +7,26 @@ class ServiceStatus {
   static const Map<String, List<String>> transitions = {
     'OPEN': ['ASSIGNED', 'DIAGNOSED', 'CANCELLED'],
     'ASSIGNED': ['DIAGNOSED', 'AWAITING_PARTS', 'AWAITING_APPROVAL', 'IN_PROGRESS', 'CANCELLED'],
-    'DIAGNOSED': ['AWAITING_PARTS', 'AWAITING_APPROVAL', 'IN_PROGRESS', 'CANCELLED'],
-    'AWAITING_PARTS': ['IN_PROGRESS', 'AWAITING_APPROVAL', 'CANCELLED'],
+    'DIAGNOSED': ['AWAITING_PARTS', 'AWAITING_APPROVAL', 'IN_PROGRESS', 'SENT_TO_COMPANY', 'CANCELLED'],
+    'AWAITING_PARTS': ['IN_PROGRESS', 'AWAITING_APPROVAL', 'SENT_TO_COMPANY', 'CANCELLED'],
     'AWAITING_APPROVAL': ['IN_PROGRESS', 'AWAITING_PARTS', 'CANCELLED'],
-    'IN_PROGRESS': ['READY', 'AWAITING_PARTS', 'AWAITING_APPROVAL', 'CANCELLED'],
+    'IN_PROGRESS': ['READY', 'AWAITING_PARTS', 'AWAITING_APPROVAL', 'SENT_TO_COMPANY', 'CANCELLED'],
+    'SENT_TO_COMPANY': ['RECEIVED_FROM_COMPANY', 'CANCELLED'],
+    'RECEIVED_FROM_COMPANY': ['IN_PROGRESS', 'READY', 'CANCELLED'],
     'READY': ['DELIVERED', 'IN_PROGRESS'],
     'DELIVERED': ['CLOSED'],
     'CLOSED': <String>[],
     'CANCELLED': <String>[],
   };
 
+  /// The company-replacement legs — driven by the Warranty-RMA actions, not the plain status sheet.
+  static const List<String> rmaStatuses = ['SENT_TO_COMPANY', 'RECEIVED_FROM_COMPANY'];
+
   static List<String> nextStatuses(String from) => transitions[from] ?? const [];
+
+  /// Next statuses the plain "Change status" sheet should offer (RMA legs handled by the RMA card).
+  static List<String> plainNextStatuses(String from) =>
+      nextStatuses(from).where((s) => !rmaStatuses.contains(s)).toList();
 
   static String label(String status) => switch (status) {
         'OPEN' => 'Open',
@@ -26,6 +35,8 @@ class ServiceStatus {
         'AWAITING_PARTS' => 'Awaiting Parts',
         'AWAITING_APPROVAL' => 'Awaiting Approval',
         'IN_PROGRESS' => 'In Progress',
+        'SENT_TO_COMPANY' => 'Sent to Manufacturer',
+        'RECEIVED_FROM_COMPANY' => 'Back from Manufacturer',
         'READY' => 'Ready',
         'DELIVERED' => 'Delivered',
         'CLOSED' => 'Closed',
@@ -37,7 +48,7 @@ class ServiceStatus {
         'READY' || 'DELIVERED' || 'CLOSED' => AppColors.success,
         'CANCELLED' => AppColors.danger,
         'AWAITING_PARTS' || 'AWAITING_APPROVAL' => AppColors.warning,
-        'IN_PROGRESS' || 'DIAGNOSED' => AppColors.info,
+        'IN_PROGRESS' || 'DIAGNOSED' || 'SENT_TO_COMPANY' || 'RECEIVED_FROM_COMPANY' => AppColors.info,
         _ => AppColors.primary,
       };
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/network/api_client.dart';
@@ -73,7 +74,18 @@ class _TenderDetailScreenState extends ConsumerState<TenderDetailScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(t['tenderCode']?.toString() ?? 'Tender')),
+      appBar: AppBar(
+        title: Text(t['tenderCode']?.toString() ?? 'Tender'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () async {
+              final saved = await context.push<bool>('/tenders/${widget.tenderId}/edit');
+              if (saved == true) _load();
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const LoadingIndicator()
           : _error != null

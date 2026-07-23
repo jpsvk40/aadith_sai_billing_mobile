@@ -54,7 +54,10 @@ Future<void> launchBillScan(BuildContext context, WidgetRef ref) async {
   );
   if (source == null || !context.mounted) return;
 
-  final XFile? picked = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 2400);
+  // High resolution + quality: the vendor bill's line-items table is dense small text. Downscaling
+  // (the old 2400px / q85) let the AI read the header/totals but drop item rows — the web uploads the
+  // full-res file, so match that. Camera source keeps full res; gallery keeps up to 4000px wide.
+  final XFile? picked = await ImagePicker().pickImage(source: source, imageQuality: 95, maxWidth: 4000);
   if (picked == null || !context.mounted) return;
 
   final messenger = ScaffoldMessenger.of(context);

@@ -44,6 +44,14 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android RELEASE SIGNING — NEVER commit these (upload key + passwords)
+key.properties
+android/key.properties
+**/key.properties
+*.jks
+*.keystore
+**/upload-keystore.jks
+
 .env
 *.g.dart
 *.freezed.dart

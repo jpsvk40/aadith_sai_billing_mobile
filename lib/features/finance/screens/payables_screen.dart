@@ -14,6 +14,7 @@ const _red = Color(0xFFEF4444);
 
 class _VendorDue {
   final String name;
+  String? vendorId;
   double total = 0;
   final List<Map<String, dynamic>> bills = [];
   _VendorDue(this.name);
@@ -54,6 +55,7 @@ class _PayablesScreenState extends ConsumerState<PayablesScreen> {
         if (due <= 0) continue;
         final vendor = (r['vendor'] is Map ? (r['vendor'] as Map)['vendorName'] : null)?.toString() ?? r['vendorName']?.toString() ?? 'Unknown vendor';
         final v = byVendor.putIfAbsent(vendor, () => _VendorDue(vendor));
+        v.vendorId ??= (r['vendor'] is Map ? (r['vendor'] as Map)['id']?.toString() : null) ?? r['vendorId']?.toString();
         v.total += due;
         v.bills.add(r);
       }
@@ -73,6 +75,14 @@ class _PayablesScreenState extends ConsumerState<PayablesScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Payables')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await context.push('/finance/payables/pay');
+          if (mounted) _load();
+        },
+        icon: const Icon(Icons.payments_outlined),
+        label: const Text('Pay vendor'),
+      ),
       body: _loading
           ? const LoadingIndicator()
           : _error != null
@@ -114,11 +124,11 @@ class _PayablesScreenState extends ConsumerState<PayablesScreen> {
                     const SizedBox(height: 12),
                     // Quick links → payments made & credit notes (generic report views)
                     Row(children: [
-                      Expanded(child: _link('Payments', Icons.payments_outlined, const Color(0xFF059669), () => context.push('/reports/view', extra: FinanceReports.vendorPayments))),
+                      Expanded(child: _link('Payments', Icons.payments_outlined, const Color(0xFF059669), () => context.push('/finance/payables/payments'))),
                       const SizedBox(width: 10),
-                      Expanded(child: _link('Vendor CN', Icons.assignment_return_outlined, const Color(0xFFD97706), () => context.push('/reports/view', extra: FinanceReports.vendorCreditNotes))),
+                      Expanded(child: _link('Vendor CN', Icons.assignment_return_outlined, const Color(0xFFD97706), () => context.push('/vendor-credit-notes'))),
                       const SizedBox(width: 10),
-                      Expanded(child: _link('Customer CN', Icons.assignment_returned_outlined, const Color(0xFF7C3AED), () => context.push('/reports/view', extra: FinanceReports.customerCreditNotes))),
+                      Expanded(child: _link('Customer CN', Icons.assignment_returned_outlined, const Color(0xFF7C3AED), () => context.push('/credit-notes'))),
                     ]),
                     const SizedBox(height: 16),
                     const Text('Vendor dues', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
@@ -167,24 +177,39 @@ class _PayablesScreenState extends ConsumerState<PayablesScreen> {
           title: Text(v.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
           subtitle: Text('${v.bills.length} open bill${v.bills.length == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
           trailing: Text(CurrencyUtils.format(v.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5, color: _red)),
-          children: v.bills.map((b) {
-            final due = _num(b['outstandingAmount'] ?? b['balanceAmount'] ?? (_num(b['totalAmount']) - _num(b['paidAmount'])));
-            final date = (b['purchaseDate'] ?? b['invoiceDate'] ?? '').toString();
-            final days = _num(b['daysDiff']).toInt();
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(children: [
-                const Icon(Icons.description_outlined, size: 15, color: AppColors.textMuted),
-                const SizedBox(width: 8),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(b['purchaseNumber']?.toString() ?? b['invoiceNumber']?.toString() ?? 'Bill', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  Text('${date.length >= 10 ? date.substring(0, 10) : date}${days > 0 ? ' · $days day${days == 1 ? '' : 's'} old' : ''}',
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-                ])),
-                Text(CurrencyUtils.format(due), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-              ]),
-            );
-          }).toList(),
+          children: [
+            ...v.bills.map((b) {
+              final due = _num(b['outstandingAmount'] ?? b['balanceAmount'] ?? (_num(b['totalAmount']) - _num(b['paidAmount'])));
+              final date = (b['purchaseDate'] ?? b['invoiceDate'] ?? '').toString();
+              final days = _num(b['daysDiff']).toInt();
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  const Icon(Icons.description_outlined, size: 15, color: AppColors.textMuted),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(b['purchaseNumber']?.toString() ?? b['invoiceNumber']?.toString() ?? 'Bill', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    Text('${date.length >= 10 ? date.substring(0, 10) : date}${days > 0 ? ' · $days day${days == 1 ? '' : 's'} old' : ''}',
+                        style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                  ])),
+                  Text(CurrencyUtils.format(due), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                ]),
+              );
+            }),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await context.push('/finance/payables/pay${v.vendorId != null ? '?vendorId=${v.vendorId}' : ''}');
+                  if (mounted) _load();
+                },
+                icon: const Icon(Icons.payments_outlined, size: 17),
+                label: const Text('Pay this vendor'),
+                style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF059669), side: const BorderSide(color: Color(0xFF059669)), minimumSize: const Size(0, 40)),
+              ),
+            ),
+          ],
         ),
       ),
     );

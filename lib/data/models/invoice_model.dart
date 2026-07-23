@@ -61,6 +61,7 @@ class Invoice {
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final String? createdByName;
   final double subtotal;
   final double? cgst;
   final double? sgst;
@@ -81,6 +82,7 @@ class Invoice {
     this.customerId,
     this.customerName,
     this.customerPhone,
+    this.createdByName,
     required this.subtotal,
     this.cgst,
     this.sgst,
@@ -103,6 +105,7 @@ class Invoice {
       customerId: json['customerId']?.toString(),
       customerName: json['customer']?['customerName'] ?? json['billingName'] ?? json['customerName'],
       customerPhone: json['customer']?['phone']?.toString() ?? json['customerPhone']?.toString(),
+      createdByName: (json['order']?['creator']?['name'] ?? json['creator']?['name'])?.toString(),
       subtotal: double.tryParse(json['subtotal']?.toString() ?? '0') ?? 0,
       cgst: double.tryParse(json['cgstTotal']?.toString() ?? json['cgst']?.toString() ?? '0'),
       sgst: double.tryParse(json['sgstTotal']?.toString() ?? json['sgst']?.toString() ?? '0'),

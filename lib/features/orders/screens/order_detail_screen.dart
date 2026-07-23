@@ -82,6 +82,16 @@ class OrderDetailScreen extends ConsumerWidget {
               Expanded(child: _infoCol(Icons.badge_outlined, 'Rep', order.representativeName ?? '-')),
             ],
           ),
+          if (order.createdByName != null && order.createdByName!.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: _infoCol(Icons.person_outline, 'Created By', order.createdByName!)),
+                const Expanded(child: SizedBox()),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
+          ],
           const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider(height: 1)),
           Row(
             children: [

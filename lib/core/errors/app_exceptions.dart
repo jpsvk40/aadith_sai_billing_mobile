@@ -4,7 +4,11 @@ class AppException implements Exception {
   final String message;
   final int? statusCode;
 
-  const AppException(this.message, {this.statusCode});
+  /// Raw decoded response body (when available) so callers can read structured
+  /// error payloads — e.g. a 409 `{ needsOverride: true, warnings: [...] }`.
+  final dynamic data;
+
+  const AppException(this.message, {this.statusCode, this.data});
 
   @override
   String toString() => message;

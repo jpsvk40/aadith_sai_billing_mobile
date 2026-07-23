@@ -28,6 +28,14 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Projects')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final saved = await context.push<bool>('/projects/create');
+          if (saved == true) ref.invalidate(projectsListProvider);
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New'),
+      ),
       body: async.when(
         loading: () => const LoadingIndicator(message: 'Loading projects…'),
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(projectsListProvider)),

@@ -47,6 +47,13 @@ class ApiConstants {
   static String invoiceDetail(String id) => '/api/invoices/$id';
   static String invoicePdf(String id) => '/api/invoices/$id/pdf';
 
+  // GST compliance — e-Invoice (IRN) + e-Way bill
+  static const String gstComplianceSettings = '/api/gst-compliance/settings';
+  static const String einvoiceList = '/api/gst-compliance/einvoice';
+  static String einvoiceGenerate(String invoiceId) => '/api/gst-compliance/einvoice/$invoiceId/generate';
+  static const String ewayBillList = '/api/gst-compliance/eway-bill';
+  static String ewayBillGenerate(String invoiceId) => '/api/gst-compliance/eway-bill/$invoiceId/generate';
+
   // Payments
   static const String payments = '/api/payments';
 
@@ -55,8 +62,13 @@ class ApiConstants {
   static const String vendorPurchasePriceHint = '/api/vendor-purchases/price-hint';
   static String vendorPurchaseDetail(String id) => '/api/vendor-purchases/$id';
   static const String vendorPayments = '/api/vendor-payments';
+  static String vendorPaymentChequeStatus(String id) => '/api/vendor-payments/$id/cheque-status';
   static const String vendorCreditNotes = '/api/vendor-credit-notes';
   static const String vendors = '/api/vendors';
+  // Vendor ledger (per-vendor outstanding + bulk FIFO payment / credit)
+  static String vendorLedger(String vendorId) => '/api/vendor-ledger/$vendorId';
+  static String vendorLedgerBulkPayment(String vendorId) => '/api/vendor-ledger/$vendorId/bulk-payment';
+  static String vendorLedgerApplyCredit(String vendorId) => '/api/vendor-ledger/$vendorId/apply-credit';
 
   // AI scanner (multipart field 'file')
   static const String scanVendorBill = '/api/ai/scan-vendor-bill';
@@ -130,6 +142,13 @@ class ApiConstants {
   // Products
   static const String products = '/api/products';
 
+  // Quotations + CRM leads (crm module)
+  static const String quotations = '/api/quotations';
+  static String quotation(String id) => '/api/quotations/$id';
+  static String quotationStatus(String id) => '/api/quotations/$id/status';
+  static String quotationConvert(String id) => '/api/quotations/$id/convert-to-invoice';
+  static const String leads = '/api/leads';
+
   // Projects (lite list — for Site-Logistics pickers)
   static const String projects = '/api/projects';
   // ERP module lists (read-only tabs)
@@ -164,6 +183,12 @@ class ApiConstants {
   static String serviceTicketShare(String id) => '/api/service-tickets/$id/share';
   static String serviceTicketInvoice(String id) => '/api/service-tickets/$id/invoice';
   static String serviceTicketAttachments(String id) => '/api/service-tickets/$id/attachments';
+  // Warranty RMA (F2) + rework (F3) + customer service history (F1)
+  static String serviceTicketRma(String id) => '/api/service-tickets/$id/rma';
+  static String serviceTicketRmaReceive(String id, String rmaId) => '/api/service-tickets/$id/rma/$rmaId/receive';
+  static const String serviceTicketsRmaOutstanding = '/api/service-tickets/rma/outstanding';
+  static String serviceTicketRework(String id) => '/api/service-tickets/$id/rework';
+  static String serviceCustomerHistory(String id) => '/api/service-tickets/customer/$id/history';
   // Items / warranty
   static const String serviceItems = '/api/service-items';
   static const String serviceItemLookup = '/api/service-items/lookup';
@@ -223,6 +248,8 @@ class ApiConstants {
   static const String glProfitLoss = '/api/gl/profit-loss';
   static const String glBalanceSheet = '/api/gl/balance-sheet';
   static const String glDayBook = '/api/gl/day-book';
+  static const String legalEntitiesSummary = '/api/legal-entities/summary';
+  static const String invoicesPrintBatchPdf = '/api/invoices/print-batch/pdf';
   // Payroll (view / approve)
   static const String payrollRuns = '/api/payroll/runs';
   static const String payrollAdvances = '/api/payroll/advances';

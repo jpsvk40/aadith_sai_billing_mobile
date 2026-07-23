@@ -216,6 +216,21 @@ class _OrderTile extends StatelessWidget {
                     Text(order.customerName!, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                   ],
                 ),
+              if (order.createdByName != null && order.createdByName!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_note_outlined, size: 14, color: AppColors.textMuted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text('By ${order.createdByName!}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

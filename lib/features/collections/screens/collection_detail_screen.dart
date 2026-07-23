@@ -192,6 +192,12 @@ class CollectionDetailScreen extends ConsumerWidget {
                         label: 'Assigned To',
                         value: collection.representativeName!,
                       ),
+                    if (collection.createdByName != null &&
+                        collection.createdByName!.isNotEmpty)
+                      _Row(
+                        label: 'Created By',
+                        value: collection.createdByName!,
+                      ),
                   ],
                 ),
               ),

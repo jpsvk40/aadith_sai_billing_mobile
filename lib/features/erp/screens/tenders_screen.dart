@@ -30,6 +30,14 @@ class _TendersScreenState extends ConsumerState<TendersScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Tenders')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final saved = await context.push<bool>('/tenders/create');
+          if (saved == true) ref.invalidate(tendersListProvider);
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New'),
+      ),
       body: async.when(
         loading: () => const LoadingIndicator(message: 'Loading tenders…'),
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(tendersListProvider)),

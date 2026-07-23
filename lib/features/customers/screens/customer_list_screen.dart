@@ -52,9 +52,21 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     // Customers CRUD owners: admin/manager, sales_rep, estimator. Others are view-only.
     final canEdit = user?.isAdmin == true || user?.isSalesRep == true || user?.effectiveRole == 'estimator';
 
+    final hasCrm = user?.hasModule('crm') == true;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Customers')),
+      appBar: AppBar(
+        title: const Text('Customers'),
+        actions: [
+          if (hasCrm)
+            IconButton(
+              tooltip: 'Quotations',
+              icon: const Icon(Icons.request_quote_outlined),
+              onPressed: () => context.push('/quotations'),
+            ),
+        ],
+      ),
       floatingActionButton: canEdit
           ? FloatingActionButton.extended(
               onPressed: () => context.push('/customers/new'),

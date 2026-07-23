@@ -160,7 +160,9 @@ class ApiClient {
       case 422:
         return ValidationException(message);
       case 500: return const ServerException();
-      default: return AppException(message, statusCode: statusCode);
+      // 409 (Conflict) and other codes keep the decoded body so callers can read
+      // structured payloads like `{ needsOverride, warnings }`.
+      default: return AppException(message, statusCode: statusCode, data: responseData);
     }
   }
 }

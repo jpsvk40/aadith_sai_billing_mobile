@@ -27,7 +27,19 @@ class MachineDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Machine')),
+      appBar: AppBar(
+        title: const Text('Machine'),
+        actions: [
+          if (user?.isOperator != true)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () async {
+                final saved = await context.push<bool>('/machinery/$machineId/edit');
+                if (saved == true) ref.invalidate(machineDetailProvider(machineId));
+              },
+            ),
+        ],
+      ),
       body: async.when(
         loading: () => const LoadingIndicator(message: 'Loading machine…'),
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(machineDetailProvider(machineId))),

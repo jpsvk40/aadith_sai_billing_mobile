@@ -243,7 +243,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                     if (inv.customerName != null)
                       Text(inv.customerName!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                     const SizedBox(height: 3),
-                    Text(AppDateUtils.formatDisplay(inv.invoiceDate), style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    Text(
+                      inv.createdByName != null && inv.createdByName!.isNotEmpty
+                          ? '${AppDateUtils.formatDisplay(inv.invoiceDate)}  ·  By ${inv.createdByName!}'
+                          : AppDateUtils.formatDisplay(inv.invoiceDate),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
                   ],
                 ),
               ),

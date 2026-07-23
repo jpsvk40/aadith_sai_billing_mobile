@@ -53,6 +53,7 @@ class Collection {
   final String? city;
   final String? representativeId;
   final String? representativeName;
+  final String? createdByName;
   final double totalOutstanding;
   final double? collectedAmount;
   final double balanceAmount;
@@ -71,6 +72,7 @@ class Collection {
     this.city,
     this.representativeId,
     this.representativeName,
+    this.createdByName,
     required this.totalOutstanding,
     this.collectedAmount,
     required this.balanceAmount,
@@ -105,6 +107,10 @@ class Collection {
           json['collectionRep']?['name'] ??
           json['representative']?['name'] ??
           json['representativeName'],
+      createdByName:
+          (json['invoice']?['order']?['creator']?['name'] ??
+                  json['invoice']?['creator']?['name'])
+              ?.toString(),
       totalOutstanding:
           double.tryParse(
             json['totalAmount']?.toString() ??

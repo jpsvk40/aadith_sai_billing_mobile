@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/network/api_client.dart';
@@ -63,6 +64,14 @@ class _InventoryMovementsScreenState extends ConsumerState<InventoryMovementsScr
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Movements')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await context.push('/finance/inventory/entries');
+          if (mounted) _load();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New entry'),
+      ),
       body: _loading
           ? const LoadingIndicator()
           : _error != null

@@ -4,6 +4,7 @@ import '../../../data/repositories/service_repository.dart';
 import '../../../data/models/service_ticket_model.dart';
 import '../../../data/models/service_item_model.dart';
 import '../../../data/models/service_contract_model.dart';
+import '../../../data/models/customer_service_history_model.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// Shared ServiceRepository (uses the singleton ApiClient + auth logout-on-401).
@@ -73,6 +74,16 @@ final ticketDetailProvider = FutureProvider.family<ServiceTicket, int>((ref, id)
 
 final ticketAttachmentsProvider = FutureProvider.family<List<ServiceAttachment>, int>((ref, id) async {
   return ref.watch(serviceRepositoryProvider).getAttachments(id);
+});
+
+// ─── Warranty RMA "out at company" worklist (F2) ───
+final rmaOutstandingProvider = FutureProvider.autoDispose<List<ServiceTicketRma>>((ref) async {
+  return ref.watch(serviceRepositoryProvider).rmaOutstanding();
+});
+
+// ─── Customer service/maintenance history (F1) ───
+final customerServiceHistoryProvider = FutureProvider.family.autoDispose<CustomerServiceHistory, int>((ref, customerId) async {
+  return ref.watch(serviceRepositoryProvider).customerHistory(customerId);
 });
 
 // ─── AMC due visits (Today tab) — 60-day window to match the web "PM visits due" panel ───

@@ -25,6 +25,14 @@ class _GlStatementScreenState extends ConsumerState<GlStatementScreen> {
   bool _loading = true;
   String? _error;
 
+  // Multi-entity filter: companies with >1 legal entity (GSTIN) can scope the report to one entity.
+  // null = all entities (consolidated, the default). Only shown when the company is multi-entity.
+  List<Map<String, dynamic>> _entities = const [];
+  bool _multiEntity = false;
+  int? _entityId;
+
+  String get _url => _entityId != null ? '$_endpoint?legalEntityId=$_entityId' : _endpoint;
+
   String get _title => switch (widget.statement) {
         GlStatement.profitLoss => 'Profit & Loss',
         GlStatement.balanceSheet => 'Balance Sheet',
@@ -40,14 +48,28 @@ class _GlStatementScreenState extends ConsumerState<GlStatementScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) { _loadEntities(); _load(); });
+  }
+
+  ApiClient get _client => ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
+
+  // Load the company's legal entities once — if it is multi-entity, the entity picker appears.
+  Future<void> _loadEntities() async {
+    try {
+      final data = await _client.get(ApiConstants.legalEntitiesSummary);
+      if (!mounted || data is! Map) return;
+      final list = ((data['entities'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
+      setState(() { _entities = list; _multiEntity = data['mode'] == 'multi'; });
+    } catch (_) {/* entity picker is optional — ignore and stay consolidated */}
   }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      final data = await client.get(_endpoint);
+      final data = await _client.get(_url);
       if (!mounted) return;
       setState(() { _data = data is Map ? data.cast<String, dynamic>() : const {}; _loading = false; });
     } catch (e) {
@@ -63,21 +85,69 @@ class _GlStatementScreenState extends ConsumerState<GlStatementScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: Text(_title)),
-      body: _loading
-          ? const LoadingIndicator()
-          : _error != null
-              ? ErrorStateWidget(message: _error!, onRetry: _load)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-                    children: switch (widget.statement) {
-                      GlStatement.profitLoss => _buildPnl(),
-                      GlStatement.balanceSheet => _buildBalanceSheet(),
-                      GlStatement.trialBalance => _buildTrialBalance(),
-                    },
-                  ),
-                ),
+      body: Column(
+        children: [
+          if (_multiEntity) _entitySelector(),
+          Expanded(
+            child: _loading
+                ? const LoadingIndicator()
+                : _error != null
+                    ? ErrorStateWidget(message: _error!, onRetry: _load)
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                          children: switch (widget.statement) {
+                            GlStatement.profitLoss => _buildPnl(),
+                            GlStatement.balanceSheet => _buildBalanceSheet(),
+                            GlStatement.trialBalance => _buildTrialBalance(),
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Horizontal entity picker (All + one chip per legal entity). Passes ?legalEntityId to the report.
+  Widget _entitySelector() {
+    return Container(
+      width: double.infinity,
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: SizedBox(
+        height: 34,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            _entityChip('All entities', null),
+            ..._entities.map((e) => _entityChip(
+                  e['name']?.toString() ?? 'Entity',
+                  int.tryParse(e['id']?.toString() ?? ''),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _entityChip(String label, int? id) {
+    final selected = _entityId == id;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.textSecondary)),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: AppColors.primary,
+        backgroundColor: AppColors.background,
+        side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
+        onSelected: (_) {
+          if (_entityId != id) { setState(() => _entityId = id); _load(); }
+        },
+      ),
     );
   }
 

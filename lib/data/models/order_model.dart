@@ -74,6 +74,7 @@ class Order {
   final String? customerPhone;
   final String? representativeId;
   final String? representativeName;
+  final String? createdByName;
   final double? totalAmount;
   final double subtotal;
   final double taxTotal;
@@ -93,6 +94,7 @@ class Order {
     this.customerPhone,
     this.representativeId,
     this.representativeName,
+    this.createdByName,
     this.totalAmount,
     this.subtotal = 0,
     this.taxTotal = 0,
@@ -124,6 +126,7 @@ class Order {
       representativeId: json['representativeId']?.toString(),
       representativeName:
           json['representative']?['name'] ?? json['representativeName'],
+      createdByName: json['creator']?['name']?.toString(),
       totalAmount: double.tryParse(
         json['grandTotal']?.toString() ??
             json['totalAmount']?.toString() ??

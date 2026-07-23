@@ -30,6 +30,16 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Machinery')),
+      floatingActionButton: ref.watch(authProvider).user?.isOperator == true
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () async {
+                final saved = await context.push<bool>('/machinery/create');
+                if (saved == true) ref.invalidate(machineryListProvider);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('New'),
+            ),
       body: async.when(
         loading: () => const LoadingIndicator(message: 'Loading machinery…'),
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(machineryListProvider)),

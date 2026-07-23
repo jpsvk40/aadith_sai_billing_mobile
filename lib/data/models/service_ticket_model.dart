@@ -112,6 +112,91 @@ class ServiceAttachment {
       );
 }
 
+/// Lightweight reference to another ticket (rework linkage).
+class TicketRef {
+  final int id;
+  final String ticketNumber;
+  final String status;
+  const TicketRef({required this.id, required this.ticketNumber, required this.status});
+  factory TicketRef.fromJson(Map<String, dynamic> j) => TicketRef(
+        id: j['id'] as int,
+        ticketNumber: (j['ticketNumber'] ?? '').toString(),
+        status: (j['status'] ?? '').toString(),
+      );
+}
+
+/// A Warranty-RMA record — a unit sent OUT to the manufacturer and coming BACK (F2).
+class ServiceTicketRma {
+  final int id;
+  final String rmaNumber;
+  final int? vendorId;
+  final String? companyName;
+  final String? outboundRef;
+  final DateTime? sentAt;
+  final DateTime? expectedReturnAt;
+  final DateTime? receivedAt;
+  final String outcome; // PENDING | REPLACED | REPAIRED | REJECTED
+  final String? replacementSerial;
+  final double? reclaimAmount;
+  final String status; // SENT | RECEIVED | CLOSED
+  final String? notes;
+  // Present only on the /rma/outstanding worklist payload.
+  final bool overdue;
+  final int? daysOut;
+  final int? ticketId; // attached by /rma/outstanding
+  final String? ticketNumber;
+  final String? ticketCustomer;
+  final String? ticketDevice;
+  const ServiceTicketRma({
+    required this.id,
+    required this.rmaNumber,
+    this.vendorId,
+    this.companyName,
+    this.outboundRef,
+    this.sentAt,
+    this.expectedReturnAt,
+    this.receivedAt,
+    this.outcome = 'PENDING',
+    this.replacementSerial,
+    this.reclaimAmount,
+    this.status = 'SENT',
+    this.notes,
+    this.overdue = false,
+    this.daysOut,
+    this.ticketId,
+    this.ticketNumber,
+    this.ticketCustomer,
+    this.ticketDevice,
+  });
+  factory ServiceTicketRma.fromJson(Map<String, dynamic> j) {
+    final t = j['ticket'] as Map<String, dynamic>?;
+    final si = t?['serviceItem'] as Map<String, dynamic>?;
+    final device = si == null ? null : [si['brand'], si['modelName']].where((e) => (e ?? '').toString().isNotEmpty).join(' ').trim();
+    return ServiceTicketRma(
+      id: j['id'] as int,
+      rmaNumber: (j['rmaNumber'] ?? '').toString(),
+      vendorId: j['vendorId'] as int?,
+      companyName: j['companyName']?.toString(),
+      outboundRef: j['outboundRef']?.toString(),
+      sentAt: j['sentAt'] != null ? DateTime.tryParse(j['sentAt'].toString()) : null,
+      expectedReturnAt: j['expectedReturnAt'] != null ? DateTime.tryParse(j['expectedReturnAt'].toString()) : null,
+      receivedAt: j['receivedAt'] != null ? DateTime.tryParse(j['receivedAt'].toString()) : null,
+      outcome: (j['outcome'] ?? 'PENDING').toString(),
+      replacementSerial: j['replacementSerial']?.toString(),
+      reclaimAmount: j['reclaimAmount'] != null ? _toD(j['reclaimAmount']) : null,
+      status: (j['status'] ?? 'SENT').toString(),
+      notes: j['notes']?.toString(),
+      overdue: j['overdue'] == true,
+      daysOut: j['daysOut'] as int?,
+      ticketId: t?['id'] as int?,
+      ticketNumber: t?['ticketNumber']?.toString(),
+      ticketCustomer: (t?['customer'] as Map<String, dynamic>?)?['customerName']?.toString(),
+      ticketDevice: (device == null || device.isEmpty) ? null : device,
+    );
+  }
+  String get company => companyName ?? (vendorId != null ? 'Vendor #$vendorId' : '—');
+}
+
 class ServiceTicket {
   final int id;
   final String ticketNumber;
@@ -147,6 +232,13 @@ class ServiceTicket {
   final ServiceParty? technician;
   final List<ServiceTicketPart> parts;
   final List<ServiceTicketEvent> events;
+  // Warranty RMA (F2) + rework (F3)
+  final List<ServiceTicketRma> rmas;
+  final int? reworkOfTicketId;
+  final bool isRework;
+  final String? reworkReason;
+  final TicketRef? reworkOf;
+  final List<TicketRef> reworks;
 
   const ServiceTicket({
     required this.id,
@@ -183,6 +275,12 @@ class ServiceTicket {
     this.technician,
     this.parts = const [],
     this.events = const [],
+    this.rmas = const [],
+    this.reworkOfTicketId,
+    this.isRework = false,
+    this.reworkReason,
+    this.reworkOf,
+    this.reworks = const [],
   });
 
   factory ServiceTicket.fromJson(Map<String, dynamic> j) {
@@ -224,9 +322,19 @@ class ServiceTicket {
       technician: j['technician'] != null ? ServiceParty.fromJson(j['technician'] as Map<String, dynamic>) : null,
       parts: (j['parts'] as List<dynamic>?)?.map((e) => ServiceTicketPart.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
       events: (j['events'] as List<dynamic>?)?.map((e) => ServiceTicketEvent.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
+      rmas: (j['rmas'] as List<dynamic>?)?.map((e) => ServiceTicketRma.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
+      reworkOfTicketId: j['reworkOfTicketId'] as int?,
+      isRework: j['isRework'] == true,
+      reworkReason: j['reworkReason']?.toString(),
+      reworkOf: j['reworkOf'] != null ? TicketRef.fromJson(j['reworkOf'] as Map<String, dynamic>) : null,
+      reworks: (j['reworks'] as List<dynamic>?)?.map((e) => TicketRef.fromJson(e as Map<String, dynamic>)).toList() ?? const [],
     );
   }
 
   bool get isOpen => !['DELIVERED', 'CLOSED', 'CANCELLED'].contains(status);
   String get customerName => customer?.name ?? '—';
+  /// Sendable to the manufacturer (an RMA can be opened from these states).
+  bool get canSendRma => const ['DIAGNOSED', 'AWAITING_PARTS', 'IN_PROGRESS'].contains(status) &&
+      !rmas.any((r) => r.status == 'SENT');
+  ServiceTicketRma? get openRma => rmas.where((r) => r.status == 'SENT').isEmpty ? null : rmas.firstWhere((r) => r.status == 'SENT');
 }

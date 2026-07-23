@@ -100,6 +100,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onTap: () => context.push('/settings/notifications'),
           ),
         ),
+        // Admin-only: user / RBAC management
+        if (ref.watch(authProvider).user?.role == 'admin') ...[
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.group_outlined, color: AppColors.primary),
+              title: const Text('Team / Users'),
+              subtitle: const Text('Invite users, set roles & module access'),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              onTap: () => context.push('/settings/users'),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
 
         // Logout button

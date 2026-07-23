@@ -30,13 +30,22 @@ Future<bool> pumpUntilFound(
 }
 
 /// Boot the real app and sign in as [email]. Returns once a post-login screen is up.
+///
+/// NOTE: pre-grant the notification permission so the first-launch system dialog doesn't cover the
+/// widget tree (system dialogs aren't findable by the tester):
+///   adb -s <device> shell pm grant com.aadithsai.aadith_sai_billing_mobile android.permission.POST_NOTIFICATIONS
 Future<void> launchAndLogin(WidgetTester tester, String email) async {
   await tester.pumpWidget(const ProviderScope(child: BootstrapApp()));
 
-  // Wait for bootstrap (dotenv/Hive/cache) → splash → login screen.
+  // Wait for bootstrap (dotenv/Hive/cache) → splash → login screen. On a cold/slow emulator the
+  // startup Future can time out ("Startup failed" + a Retry button) — tap Retry and wait again.
+  var loginUp = await pumpUntilFound(tester, find.text('Sign In'), timeout: const Duration(seconds: 60));
+  if (!loginUp && find.text('Retry').evaluate().isNotEmpty) {
+    await tester.tap(find.text('Retry'));
+    loginUp = await pumpUntilFound(tester, find.text('Sign In'), timeout: const Duration(seconds: 60));
+  }
   final emailField = find.byType(TextFormField);
-  final signedInOrLogin = await pumpUntilFound(tester, find.text('Sign In'), timeout: const Duration(seconds: 40));
-  expect(signedInOrLogin, true, reason: 'Login screen did not appear');
+  expect(loginUp, true, reason: 'Login screen did not appear');
 
   await tester.enterText(emailField.at(0), email);
   await tester.enterText(emailField.at(1), password);

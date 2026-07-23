@@ -15,6 +15,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../providers/invoice_detail_provider.dart';
+import '../widgets/invoice_compliance_section.dart';
 
 const _badgeColors = [
   Color(0xFF0D6EFD), Color(0xFF198754), Color(0xFFF59E0B), Color(0xFF7C3AED),
@@ -119,6 +120,8 @@ class InvoiceDetailScreen extends ConsumerWidget {
                     if (inv.items.isNotEmpty) _itemsSection(inv),
                     const SizedBox(height: 14),
                     _totalsCard(inv),
+                    const SizedBox(height: 14),
+                    InvoiceComplianceSection(invoiceId: invoiceId),
                     if (inv.splitInvoices.isNotEmpty) ...[
                       const SizedBox(height: 18),
                       _splitSection(context, inv),
@@ -155,6 +158,10 @@ class InvoiceDetailScreen extends ConsumerWidget {
             if (inv.dueDate != null) ...[
               const SizedBox(height: 8),
               _kv('Due Date', AppDateUtils.formatDisplay(inv.dueDate)),
+            ],
+            if (inv.createdByName != null && inv.createdByName!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _kv('Created By', inv.createdByName!),
             ],
           ],
         ),

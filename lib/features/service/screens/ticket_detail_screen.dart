@@ -91,6 +91,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                   case 'jobsheet': _showJobSheet(t); break;
                   case 'certificate': _showCertificate(t); break;
                   case 'share': _shareTracking(t); break;
+                  case 'rework': _reworkSheet(t); break;
                 }
               },
               itemBuilder: (ctx) => [
@@ -98,6 +99,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                 if (['READY', 'DELIVERED', 'CLOSED'].contains(async.value!.status))
                   const PopupMenuItem(value: 'certificate', child: ListTile(dense: true, leading: Icon(Icons.workspace_premium_outlined), title: Text('Service certificate'))),
                 const PopupMenuItem(value: 'share', child: ListTile(dense: true, leading: Icon(Icons.share_outlined), title: Text('Share tracking link'))),
+                if (['DELIVERED', 'CLOSED'].contains(async.value!.status))
+                  const PopupMenuItem(value: 'rework', child: ListTile(dense: true, leading: Icon(Icons.replay, color: Color(0xFF7C3AED)), title: Text('Reopen for rework'))),
               ],
             ),
         ],
@@ -113,7 +116,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   Widget _body(ServiceTicket t) {
     final user = ref.watch(authProvider).user;
     final canBill = user?.canBill == true;
-    final nexts = ServiceStatus.nextStatuses(t.status);
+    // The company-replacement legs are driven by the RMA card, not the plain status sheet.
+    final nexts = ServiceStatus.plainNextStatuses(t.status);
     return Stack(
       children: [
         RefreshIndicator(
@@ -134,7 +138,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                 ],
                 _kv('Type', ServiceStatus.serviceTypeLabel(t.serviceType)),
                 _kv('Location', t.location == 'ONSITE' ? 'On-site' : 'In-shop'),
-                if ((t.customer?.phone ?? '').isNotEmpty || t.location == 'ONSITE')
+                if ((t.customer?.phone ?? '').isNotEmpty || t.location == 'ONSITE' || t.customer?.id != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Wrap(spacing: 8, runSpacing: 8, children: [
@@ -142,6 +146,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                         OutlinedButton.icon(onPressed: () => _call(t.customer!.phone!), icon: const Icon(Icons.call, size: 18), label: const Text('Call')),
                       if (t.location == 'ONSITE')
                         OutlinedButton.icon(onPressed: () => _navigate(t.customerName), icon: const Icon(Icons.directions, size: 18), label: const Text('Navigate')),
+                      if (t.customer?.id != null)
+                        OutlinedButton.icon(onPressed: () => context.push('/service/customers/${t.customer!.id}'), icon: const Icon(Icons.history, size: 18), label: const Text('History')),
                     ]),
                   ),
               ]),
@@ -170,6 +176,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
               ],
               const SizedBox(height: 12),
               _partsSection(t),
+              const SizedBox(height: 12),
+              _rmaSection(t),
               const SizedBox(height: 12),
               _photosSection(t),
               const SizedBox(height: 12),
@@ -201,6 +209,15 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                 Text('Reported ${AppDateUtils.formatDisplay(t.reportedAt)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                 if (t.promisedAt != null)
                   Text('Promised ${AppDateUtils.formatDisplay(t.promisedAt)}', style: TextStyle(fontSize: 12, color: t.slaBreached ? AppColors.danger : AppColors.textSecondary)),
+                if (t.isRework && t.reworkOf != null || t.reworks.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Wrap(spacing: 6, runSpacing: 6, children: [
+                      if (t.isRework && t.reworkOf != null)
+                        _reworkBadge('↺ Rework of ${t.reworkOf!.ticketNumber}', () => context.push('/service/tickets/${t.reworkOf!.id}')),
+                      ...t.reworks.map((r) => _reworkBadge('Reworked → ${r.ticketNumber}', () => context.push('/service/tickets/${r.id}'))),
+                    ]),
+                  ),
               ],
             ),
           ),
@@ -1003,6 +1020,246 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       );
 
   // ─── small layout helpers ───
+  // ════════════ Warranty RMA (F2) ════════════
+
+  Widget _reworkBadge(String text, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+          decoration: BoxDecoration(color: const Color(0xFF7C3AED).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+          child: Text(text, style: const TextStyle(color: Color(0xFF7C3AED), fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
+      );
+
+  Widget _rmaSection(ServiceTicket t) {
+    return _section('Warranty RMA · Company replacement', [
+      if (t.rmas.isEmpty)
+        const Text('Nothing sent to the company yet.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+      ...t.rmas.map((r) => _rmaCard(t, r)),
+    ], trailing: t.canSendRma
+        ? TextButton.icon(onPressed: _busy ? null : () => _sendRmaSheet(t), icon: const Icon(Icons.local_shipping_outlined, size: 18), label: const Text('Send'))
+        : null);
+  }
+
+  Widget _rmaCard(ServiceTicket t, ServiceTicketRma r) {
+    final c = r.status == 'SENT' ? AppColors.warning : (r.status == 'RECEIVED' ? AppColors.success : AppColors.textSecondary);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(r.rmaNumber, style: const TextStyle(fontWeight: FontWeight.w800))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+            child: Text(r.outcome != 'PENDING' ? '${r.status} · ${r.outcome}' : r.status, style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        _kv('Company', r.company),
+        if (r.outboundRef != null) _kv('Docket / Ref', r.outboundRef!),
+        if (r.sentAt != null) _kv('Sent', AppDateUtils.formatDisplay(r.sentAt)),
+        if (r.expectedReturnAt != null) _kv('Expected back', AppDateUtils.formatDisplay(r.expectedReturnAt)),
+        if (r.receivedAt != null) _kv('Received', AppDateUtils.formatDisplay(r.receivedAt)),
+        if (r.replacementSerial != null) _kv('Replacement serial', r.replacementSerial!),
+        if (r.reclaimAmount != null) _kv('Reclaimed', CurrencyUtils.format(r.reclaimAmount)),
+        if (r.status == 'SENT')
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _busy ? null : () => _receiveRmaSheet(t, r),
+                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                label: const Text('Mark received from company'),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Future<void> _sendRmaSheet(ServiceTicket t) async {
+    final companyCtrl = TextEditingController();
+    final refCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    DateTime? expected;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: StatefulBuilder(
+          builder: (ctx, setS) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Send to manufacturer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 4),
+              const Text('Opens a company RMA · ticket → Sent to manufacturer', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
+              TextField(controller: companyCtrl, decoration: const InputDecoration(labelText: 'Manufacturer / company *', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: refCtrl, decoration: const InputDecoration(labelText: 'Company RMA / docket ref', border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 7)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                    if (d != null) setS(() => expected = d);
+                  },
+                  icon: const Icon(Icons.event, size: 18),
+                  label: Text(expected == null ? 'Expected back by (optional)' : 'Back by ${AppDateUtils.formatDisplay(expected)}'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes', border: OutlineInputBorder()), maxLines: 2),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (companyCtrl.text.trim().isEmpty) { _snack('Enter the manufacturer / company name.', error: true); return; }
+                    Navigator.pop(ctx, true);
+                  },
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: const Text('Dispatch to company'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _run(
+      () => ref.read(serviceRepositoryProvider).sendRma(
+            t.id,
+            companyName: companyCtrl.text.trim(),
+            outboundRef: refCtrl.text.trim().isEmpty ? null : refCtrl.text.trim(),
+            expectedReturnAt: expected,
+            notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+          ),
+      success: 'Sent to company ✓',
+    );
+  }
+
+  Future<void> _receiveRmaSheet(ServiceTicket t, ServiceTicketRma r) async {
+    var outcome = 'REPLACED';
+    final serialCtrl = TextEditingController();
+    final reclaimCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final canBill = ref.read(authProvider).user?.canBill == true;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: StatefulBuilder(
+          builder: (ctx, setS) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Receive ${r.rmaNumber}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 12),
+              const Text('Outcome', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, children: ['REPLACED', 'REPAIRED', 'REJECTED'].map((o) => ChoiceChip(label: Text(o), selected: outcome == o, onSelected: (_) => setS(() => outcome = o))).toList()),
+              if (outcome == 'REPLACED') ...[
+                const SizedBox(height: 12),
+                TextField(controller: serialCtrl, decoration: const InputDecoration(labelText: 'Replacement serial / IMEI', border: OutlineInputBorder())),
+              ],
+              if (canBill) ...[
+                const SizedBox(height: 12),
+                TextField(controller: reclaimCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost reclaimed from company', prefixText: '₹ ', border: OutlineInputBorder())),
+              ],
+              const SizedBox(height: 12),
+              TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes', border: OutlineInputBorder()), maxLines: 2),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: const Text('Mark received & resume'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _run(
+      () => ref.read(serviceRepositoryProvider).receiveRma(
+            t.id, r.id,
+            outcome: outcome,
+            replacementSerial: serialCtrl.text.trim(),
+            reclaimAmount: double.tryParse(reclaimCtrl.text.trim()),
+            notes: notesCtrl.text.trim(),
+          ),
+      success: 'Received from company ✓',
+    );
+  }
+
+  // ════════════ Rework (F3) ════════════
+
+  Future<void> _reworkSheet(ServiceTicket t) async {
+    final reasonCtrl = TextEditingController();
+    var chargeable = false;
+    final canBill = ref.read(authProvider).user?.canBill == true;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: StatefulBuilder(
+          builder: (ctx, setS) => Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Reopen for rework', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('Creates a new ticket linked to ${t.ticketNumber}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
+              TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Why is it back? (reason) *', border: OutlineInputBorder()), maxLines: 3),
+              if (canBill)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: chargeable,
+                  onChanged: (v) => setS(() => chargeable = v),
+                  title: const Text('Charge for this rework'),
+                  subtitle: const Text('Off by default — rework is usually free'),
+                ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (reasonCtrl.text.trim().isEmpty) { _snack('Enter a reason for the rework.', error: true); return; }
+                    Navigator.pop(ctx, true);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7C3AED), padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: const Text('Create rework ticket'),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final result = await _run(
+      () => ref.read(serviceRepositoryProvider).rework(t.id, reason: reasonCtrl.text.trim(), isChargeable: chargeable),
+      success: 'Rework ticket created',
+    );
+    if (result != null && mounted) context.push('/service/tickets/${result.id}');
+  }
+
   Widget _section(String title, List<Widget> children, {Widget? trailing}) {
     return Container(
       width: double.infinity,

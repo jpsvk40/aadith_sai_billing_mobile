@@ -4,6 +4,7 @@ import '../models/service_ticket_model.dart';
 import '../models/service_item_model.dart';
 import '../models/service_contract_model.dart';
 import '../models/calendar_event_model.dart';
+import '../models/customer_service_history_model.dart';
 
 /// One repository for the whole Service & Warranty module (tickets, items, AMC, reports).
 /// Thin wrapper over ApiClient; screens/providers call these.
@@ -113,6 +114,47 @@ class ServiceRepository {
   Future<Map<String, dynamic>> shareLink(int id) async {
     final data = await _client.get(ApiConstants.serviceTicketShare('$id'));
     return (data as Map).cast<String, dynamic>();
+  }
+
+  // ─── Warranty RMA (F2) ───
+  Future<ServiceTicket> sendRma(int id, {String? companyName, int? vendorId, String? outboundRef, DateTime? expectedReturnAt, String? notes}) async {
+    final data = await _client.post(ApiConstants.serviceTicketRma('$id'), data: {
+      if (companyName != null) 'companyName': companyName,
+      if (vendorId != null) 'vendorId': vendorId,
+      if (outboundRef != null) 'outboundRef': outboundRef,
+      if (expectedReturnAt != null) 'expectedReturnAt': expectedReturnAt.toIso8601String(),
+      if (notes != null) 'notes': notes,
+    });
+    return ServiceTicket.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<ServiceTicket> receiveRma(int id, int rmaId, {required String outcome, String? replacementSerial, double? reclaimAmount, String? notes}) async {
+    final data = await _client.patch(ApiConstants.serviceTicketRmaReceive('$id', '$rmaId'), data: {
+      'outcome': outcome,
+      if (replacementSerial != null && replacementSerial.isNotEmpty) 'replacementSerial': replacementSerial,
+      if (reclaimAmount != null) 'reclaimAmount': reclaimAmount,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return ServiceTicket.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Units currently out at the manufacturer (RMA status SENT), overdue-flagged.
+  Future<List<ServiceTicketRma>> rmaOutstanding() async {
+    final data = await _client.get(ApiConstants.serviceTicketsRmaOutstanding);
+    if (data is List) return data.map((e) => ServiceTicketRma.fromJson(e as Map<String, dynamic>)).toList();
+    return const [];
+  }
+
+  // ─── Rework (F3) ───
+  Future<ServiceTicket> rework(int id, {required String reason, bool isChargeable = false}) async {
+    final data = await _client.post(ApiConstants.serviceTicketRework('$id'), data: {'reason': reason, 'isChargeable': isChargeable});
+    return ServiceTicket.fromJson(data as Map<String, dynamic>);
+  }
+
+  // ─── Customer service history (F1) ───
+  Future<CustomerServiceHistory> customerHistory(int customerId) async {
+    final data = await _client.get(ApiConstants.serviceCustomerHistory('$customerId'));
+    return CustomerServiceHistory.fromJson(data as Map<String, dynamic>);
   }
 
   // ─── Attachments (photos + signed handover) ───

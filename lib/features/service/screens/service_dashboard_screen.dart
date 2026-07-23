@@ -68,6 +68,7 @@ class ServiceDashboardScreen extends ConsumerWidget {
                 const SizedBox(height: 14),
                 Wrap(spacing: 10, runSpacing: 10, children: [
                   _quickLink(context, 'All Tickets', Icons.list_alt, '/service/tickets'),
+                  _quickLink(context, 'Out at Company', Icons.local_shipping_outlined, '/service/rma/outstanding'),
                   _quickLink(context, 'Calendar', Icons.calendar_month, '/service/calendar'),
                   _quickLink(context, 'Today (AMC)', Icons.event, '/service/today'),
                   _quickLink(context, 'Warranty', Icons.devices_other, '/service/items'),

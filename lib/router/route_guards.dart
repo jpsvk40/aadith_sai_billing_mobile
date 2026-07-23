@@ -16,6 +16,11 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/orders')) return 'orders';
   if (location.startsWith('/dispatch')) return 'dispatch';
   if (location.startsWith('/customers')) return 'customers';
+  if (location.startsWith('/products')) return 'products';
+  if (location.startsWith('/inventory/stocktake')) return 'stocktake';
+  if (location.startsWith('/quotations')) return 'crm'; // Quotations & CRM leads
+  if (location.startsWith('/vendor-credit-notes')) return 'vendor_purchases';
+  if (location.startsWith('/credit-notes')) return 'invoices';
   if (location.startsWith('/invoices')) return 'invoices';
   // ─── Shared Back-Office Spine — module-gate each surface (deep links too) ───
   if (location.startsWith('/finance/gst')) return 'gst';
@@ -36,6 +41,9 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/machinery')) return 'machinery';
   if (location.startsWith('/tenders')) return 'tender';
   if (location.startsWith('/correspondence')) return 'correspondence';
+  if (location.startsWith('/insights/customer-trace')) return 'business_trace';
+  if (location.startsWith('/insights/sales-advisor')) return 'sales_intelligence';
+  if (location.startsWith('/insights/inventory-advisor')) return 'inventory_intelligence';
   if (location.startsWith('/commissions')) return 'reports';
   if (location.startsWith('/alerts')) return 'alerts';
   if (location.startsWith('/dashboard')) return null;

@@ -72,7 +72,18 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(p['projectCode']?.toString() ?? 'Project')),
+      appBar: AppBar(
+        title: Text(p['projectCode']?.toString() ?? 'Project'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () async {
+              final saved = await context.push<bool>('/projects/${widget.projectId}/edit');
+              if (saved == true) _load();
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const LoadingIndicator()
           : _error != null

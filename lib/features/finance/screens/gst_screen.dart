@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -125,14 +126,20 @@ class _GstScreenState extends ConsumerState<GstScreen> {
                         _bucketCard('B2B', 'Registered buyers (with GSTIN)', b2b, const Color(0xFF2563EB), Icons.business_outlined),
                         _bucketCard('B2C Small', 'Consumer sales (intra-state / ≤ ₹2.5L)', b2cs, const Color(0xFF16A34A), Icons.people_outline),
                         _bucketCard('B2C Large', 'Inter-state consumer > ₹2.5L', b2cl, const Color(0xFF9333EA), Icons.local_shipping_outlined),
+                        const SizedBox(height: 16),
+                        const Text('Registers & returns', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                         const SizedBox(height: 10),
+                        _linkTile(context, Icons.receipt_long_outlined, 'e-Invoice Register', 'IRNs · Ack no · status', const Color(0xFF2563EB), '/finance/gst/einvoice'),
+                        _linkTile(context, Icons.local_shipping_outlined, 'e-Way Bill Register', 'EWB no · validity · vehicle', const Color(0xFF0EA5E9), '/finance/gst/eway'),
+                        _linkTile(context, Icons.fact_check_outlined, 'GST Returns Review', 'GSTR-1 summary · validations', const Color(0xFF16A34A), '/finance/gst/returns'),
+                        const SizedBox(height: 6),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFBFDBFE))),
                           child: const Row(children: [
                             Icon(Icons.info_outline, size: 18, color: Color(0xFF2563EB)),
                             SizedBox(width: 10),
-                            Expanded(child: Text('Returns, e-invoicing and filing are managed on the web portal.', style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF)))),
+                            Expanded(child: Text('Filing to the GST portal is completed on the web portal.', style: TextStyle(fontSize: 12, color: Color(0xFF1E40AF)))),
                           ]),
                         ),
                       ]),
@@ -141,6 +148,27 @@ class _GstScreenState extends ConsumerState<GstScreen> {
       ]),
     );
   }
+
+  Widget _linkTile(BuildContext context, IconData icon, String title, String subtitle, Color color, String route) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border, width: 0.5),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+        ),
+        child: ListTile(
+          onTap: () => context.push(route),
+          leading: Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: Colors.white, size: 21),
+          ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+          subtitle: Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+        ),
+      );
 
   Widget _bucketCard(String title, String subtitle, Map<String, dynamic> bucket, Color color, IconData icon) {
     final count = _num(bucket['count']).toInt();
