@@ -33,7 +33,7 @@ Future<bool> pumpUntilFound(
 ///
 /// NOTE: pre-grant the notification permission so the first-launch system dialog doesn't cover the
 /// widget tree (system dialogs aren't findable by the tester):
-///   adb -s <device> shell pm grant com.aadithsai.aadith_sai_billing_mobile android.permission.POST_NOTIFICATIONS
+///   `adb -s <device> shell pm grant com.aadithsai.aadith_sai_billing_mobile android.permission.POST_NOTIFICATIONS`
 Future<void> launchAndLogin(WidgetTester tester, String email) async {
   await tester.pumpWidget(const ProviderScope(child: BootstrapApp()));
 

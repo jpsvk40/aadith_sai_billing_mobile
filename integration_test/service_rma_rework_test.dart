@@ -9,7 +9,6 @@
 // Note: the full RMA send→receive and rework flows were also validated by driving the live app on the
 // emulator (see the screenshots in the PR). This automated test covers the new navigation surface
 // reliably (the create-ticket customer-picker chain is timing-brittle in the harness).
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'service_e2e_helpers.dart';
