@@ -124,6 +124,11 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
+        # Internal testing only: an uploaded, processed build reaches internal testers (App Store
+        # Connect users added to this app) with NO Beta App Review and NO Test Information required.
+        # We intentionally omit beta_groups — Codemagic treats a named beta_group as EXTERNAL
+        # distribution, which needs the group to exist + beta review + Feedback Email + review
+        # contact (that's the "Complete test information is required ... for external testing"
+        # failure). To add EXTERNAL testers later: create an external group in TestFlight, fill
+        # Test Information, then re-add `beta_groups: [<that group>]` here.
         submit_to_testflight: true
-        beta_groups:
-          - Internal Testers
