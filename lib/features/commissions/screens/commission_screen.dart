@@ -12,6 +12,8 @@ const _violet = Color(0xFF7C3AED);
 
 enum _Period { thisMonth, lastMonth, thisFy, all, custom }
 
+enum _RepType { all, sales, collection }
+
 /// Rep Commission — role-aware. A rep sees only their own numbers (backend
 /// self-scopes); an admin sees the whole team: a per-rep leaderboard built
 /// from /rep-commissions/summary and the settlement invoices (REPINV) list,
@@ -29,11 +31,14 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
   bool _loading = true;
   String? _error;
 
-  int _tab = 0; // 0 = Reps, 1 = Settlements
+  int _tab = 0; // 0 = Reps, 1 = Settlements, 2 = History
   _Period _period = _Period.thisMonth;
   DateTimeRange? _customRange;
   String _invStatus = 'All';
+  _RepType _repType = _RepType.all;
   String _search = '';
+  String _invSearch = '';
+  String _histSearch = '';
 
   static const _invStatuses = ['All', 'Pending', 'Partial', 'Paid'];
 
@@ -105,6 +110,43 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
 
   double _num(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
 
+  // Paid settlements power the History tab — derived client-side from the
+  // already-loaded /rep-commissions list (no dedicated history endpoint).
+  List<Map<String, dynamic>> get _paidInvoices =>
+      _invoices.where((i) => _num(i['paidAmount']) > 0).toList();
+
+  String _repName(Map<String, dynamic> i) =>
+      (i['representative'] is Map ? i['representative']['name'] : null)?.toString() ?? '';
+
+  String _payDateStr(Map<String, dynamic> i) =>
+      (i['lastPaymentDate'] ?? i['settledDate'] ?? '').toString();
+
+  /// Keeps a paid invoice if its payment date lands in the selected period
+  /// window ([from]/[to] are 'YYYY-MM-DD' strings; null/null = All time).
+  bool _inPeriod(Map<String, dynamic> i, String? from, String? to) {
+    if (from == null && to == null) return true;
+    final ds = _payDateStr(i);
+    if (ds.length < 10) return false; // no payment date → exclude when a period is active
+    final d = ds.substring(0, 10); // 'YYYY-MM-DD' compares lexicographically as a date
+    if (from != null && d.compareTo(from) < 0) return false;
+    if (to != null && d.compareTo(to) > 0) return false;
+    return true;
+  }
+
+  Widget _searchField(String hint, ValueChanged<String> onChanged) => TextField(
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          hintText: hint,
+          prefixIcon: const Icon(Icons.search, size: 20),
+          isDense: true,
+          filled: true,
+          fillColor: AppColors.surface,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+        ),
+      );
+
   Future<void> _pickCustom() async {
     final now = DateTime.now();
     final picked = await showDateRangePicker(
@@ -136,17 +178,23 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
                     const SizedBox(height: 12),
                     _periodChips(),
                     const SizedBox(height: 12),
-                    // ── Tab switch: Reps | Settlements ──
+                    // ── Tab switch: Reps | Settlements | History ──
                     Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
                       child: Row(children: [
                         _segButton('Reps (${_reps.length})', 0),
                         _segButton('Settlements (${_invoices.length})', 1),
+                        _segButton('History (${_paidInvoices.length})', 2),
                       ]),
                     ),
                     const SizedBox(height: 12),
-                    if (_tab == 0) ..._repsTab(isRep) else ..._settlementsTab(isRep),
+                    if (_tab == 0)
+                      ..._repsTab(isRep)
+                    else if (_tab == 1)
+                      ..._settlementsTab(isRep)
+                    else
+                      ..._historyTab(isRep),
                   ]),
                 ),
     );
@@ -246,7 +294,10 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
             borderRadius: BorderRadius.circular(9),
           ),
           alignment: Alignment.center,
-          child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: sel ? Colors.white : AppColors.textSecondary)),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label, maxLines: 1, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: sel ? Colors.white : AppColors.textSecondary)),
+          ),
         ),
       ),
     );
@@ -255,27 +306,60 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
   // ── Tab 0: per-rep leaderboard ──
   List<Widget> _repsTab(bool isRep) {
     final q = _search.trim().toLowerCase();
-    final rows = q.isEmpty ? _reps : _reps.where((r) => (r['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+    Iterable<Map<String, dynamic>> filtered = _reps;
+    // Rep-type filter (client-side). The "No Rep" informational row is always
+    // kept; reps default to SALES when the field is absent (matches web).
+    if (_repType != _RepType.all) {
+      final want = _repType == _RepType.sales ? 'SALES' : 'COLLECTION';
+      filtered = filtered.where((r) =>
+          r['isNoRep'] == true || (r['repType'] ?? 'SALES').toString().toUpperCase() == want);
+    }
+    if (q.isNotEmpty) {
+      filtered = filtered.where((r) => (r['name'] ?? '').toString().toLowerCase().contains(q));
+    }
+    final rows = filtered.toList();
     return [
-      if (!isRep)
-        TextField(
-          onChanged: (v) => setState(() => _search = v),
-          decoration: InputDecoration(
-            hintText: 'Search rep…',
-            prefixIcon: const Icon(Icons.search, size: 20),
-            isDense: true,
-            filled: true,
-            fillColor: AppColors.surface,
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-          ),
-        ),
-      if (!isRep) const SizedBox(height: 12),
+      if (!isRep) ...[
+        _searchField('Search rep…', (v) => setState(() => _search = v)),
+        const SizedBox(height: 10),
+        _repTypeChips(),
+        const SizedBox(height: 12),
+      ],
       if (rows.isEmpty)
         const Padding(padding: EdgeInsets.symmetric(vertical: 40), child: Center(child: Text('No reps in this period', style: TextStyle(color: AppColors.textSecondary)))),
       ...rows.asMap().entries.map((e) => _repCard(e.key, e.value)),
     ];
+  }
+
+  // Rep-Type quick filter (All / Sales / Collection) — Reps tab only.
+  Widget _repTypeChips() {
+    Widget chip(String label, _RepType t) {
+      final sel = _repType == t;
+      final c = switch (t) {
+        _RepType.sales => const Color(0xFF2563EB),
+        _RepType.collection => const Color(0xFFD97706),
+        _ => _violet,
+      };
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: sel,
+          onSelected: (_) => setState(() => _repType = t),
+          selectedColor: c.withValues(alpha: 0.15),
+          labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? c : AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        chip('All Types', _RepType.all),
+        chip('Sales', _RepType.sales),
+        chip('Collection', _RepType.collection),
+      ]),
+    );
   }
 
   Widget _repCard(int rank, Map<String, dynamic> r) {
@@ -340,10 +424,18 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
 
   // ── Tab 1: settlement invoices (REPINV) ──
   List<Widget> _settlementsTab(bool isRep) {
-    final rows = _invStatus == 'All'
+    final q = _invSearch.trim().toLowerCase();
+    var rows = _invStatus == 'All'
         ? _invoices
         : _invoices.where((i) => (i['status'] ?? '').toString().toLowerCase() == _invStatus.toLowerCase()).toList();
+    if (q.isNotEmpty) {
+      rows = rows.where((i) =>
+          (i['invoiceNo'] ?? '').toString().toLowerCase().contains(q) ||
+          _repName(i).toLowerCase().contains(q)).toList();
+    }
     return [
+      _searchField('Search invoice or rep…', (v) => setState(() => _invSearch = v)),
+      const SizedBox(height: 10),
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(children: _invStatuses.map((s) {
@@ -422,6 +514,113 @@ class _CommissionScreenState extends ConsumerState<CommissionScreen> {
           _metric('Sales ($items inv)', CurrencyUtils.format(_num(i['totalOrderAmount']))),
           _metric('Commission', commission > 0 ? CurrencyUtils.format(commission) : '—'),
           _metric('Paid', CurrencyUtils.format(paid), color: paid > 0 ? AppColors.success : null),
+        ]),
+      ]),
+    );
+  }
+
+  // ── Tab 2: payment history — paid settlements in the selected period ──
+  List<Widget> _historyTab(bool isRep) {
+    final q = _histSearch.trim().toLowerCase();
+    final (from, to) = _range();
+    var rows = _paidInvoices.where((i) => _inPeriod(i, from, to)).toList();
+    if (q.isNotEmpty) {
+      rows = rows.where((i) =>
+          (i['invoiceNo'] ?? '').toString().toLowerCase().contains(q) ||
+          _repName(i).toLowerCase().contains(q)).toList();
+    }
+    // Most-recently-paid first.
+    rows.sort((a, b) => _payDateStr(b).compareTo(_payDateStr(a)));
+    double paid = 0, balance = 0;
+    for (final i in rows) {
+      paid += _num(i['paidAmount']);
+      balance += _num(i['balanceAmount']);
+    }
+    return [
+      _searchField('Search invoice or rep…', (v) => setState(() => _histSearch = v)),
+      const SizedBox(height: 12),
+      if (rows.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(child: Text('No commission payments in this period', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary))),
+        )
+      else ...[
+        _historySummary(rows.length, paid, balance),
+        const SizedBox(height: 12),
+        ...rows.map((i) => _historyCard(i, showRep: !isRep)),
+      ],
+    ];
+  }
+
+  Widget _historySummary(int count, double paid, double balance) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.success.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.22)),
+        ),
+        child: Row(children: [
+          _metric('Records', '$count'),
+          _metric('Total Paid', CurrencyUtils.format(paid), color: AppColors.success),
+          _metric('Total Balance', balance > 0 ? CurrencyUtils.format(balance) : '—', color: balance > 0 ? const Color(0xFFDC2626) : null),
+        ]),
+      );
+
+  Widget _historyCard(Map<String, dynamic> i, {required bool showRep}) {
+    final status = (i['paymentStatus'] ?? i['status'] ?? '').toString();
+    final sc = switch (status.toLowerCase()) {
+      'settled' || 'paid' => AppColors.success,
+      'partial' => const Color(0xFFD97706),
+      _ => const Color(0xFF2563EB),
+    };
+    final paid = _num(i['paidAmount']);
+    final balance = _num(i['balanceAmount']);
+    final payDate = _payDateStr(i);
+    final payShort = payDate.length >= 10 ? payDate.substring(0, 10) : '';
+    final from = (i['periodFrom'] ?? '').toString();
+    final to = (i['periodTo'] ?? '').toString();
+    final period = from.length >= 10 && to.length >= 10 ? '${from.substring(0, 10)} → ${to.substring(0, 10)}' : '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 0.5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(11)),
+            child: const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(i['invoiceNo']?.toString() ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            const SizedBox(height: 2),
+            Text(
+              [
+                if (showRep) _repName(i),
+                if (period.isNotEmpty) period,
+              ].where((s) => s.isNotEmpty).join(' · '),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+            ),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: sc.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
+            child: Text(status, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: sc)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _metric('Paid', CurrencyUtils.format(paid), color: AppColors.success),
+          _metric('Balance', balance > 0 ? CurrencyUtils.format(balance) : '—', color: balance > 0 ? const Color(0xFFDC2626) : null),
+          _metric('Paid on', payShort.isEmpty ? '—' : payShort),
         ]),
       ]),
     );

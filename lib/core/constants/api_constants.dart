@@ -239,6 +239,7 @@ class ApiConstants {
   static String advanceFloatClose(String id) => '/api/advance-floats/$id/close';
   static const String inventoryStockValuation = '/api/inventory-reports/stock-valuation';
   static const String inventoryStockSummary = '/api/inventory-reports/stock-summary';
+  static const String inventoryLedger = '/api/inventory-reports/ledger';
   // Inventory depth (read + transfer receive)
   static const String inventoryItems = '/api/inventory-items';
   static const String inventoryLocations = '/api/inventory-locations';

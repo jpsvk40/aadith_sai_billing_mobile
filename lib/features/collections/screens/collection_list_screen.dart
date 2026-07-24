@@ -6,17 +6,25 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/collection_model.dart';
 import '../../../data/network/api_client.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 
 const _teal = Color(0xFF0D9488);
 
-enum _Period { all, week, month, custom }
+/// How the assignment list is grouped into collapsible sections. Mirrors the
+/// web CollectionPage group tabs (byRep / byDistrict / byCustomer). "Area" maps
+/// to district (falling back to city).
+enum _GroupBy { none, rep, area, customer }
 
 /// Collections — role-aware. A collection rep sees only their own assignments
-/// (backend self-scopes); an admin/manager sees the whole book with rep +
-/// period filters (server-side) and status/search (instant, client-side).
+/// (backend self-scopes); an admin/manager sees the whole book.
+///
+/// Server-side filters (rep, status, period/date range, financial year) are
+/// threaded to `GET /collections`. Client-side controls (search, district,
+/// sort, group-by) run over the loaded list — mirroring the web portal.
 class CollectionListScreen extends ConsumerStatefulWidget {
   const CollectionListScreen({super.key});
 
@@ -30,14 +38,24 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
   bool _loading = true;
   String? _error;
 
-  // Filters
+  // ── Server-side filters ──
   int? _repId; // null = all reps (admin only)
-  String _status = 'All';
-  _Period _period = _Period.all;
-  DateTimeRange? _customRange;
+  String _status = 'All'; // sent as `status` when != 'All'
+  ListFilterState _filter = ListFilterState(); // period / date range / FY / district(client)
+
+  // ── Client-side controls ──
   String _search = '';
+  SortSpec? _sort; // null = server order (createdAt desc)
+  _GroupBy _group = _GroupBy.none;
+  final Set<String> _collapsed = {}; // collapsed group keys
 
   static const _statuses = ['All', 'Pending', 'Partial', 'Collected'];
+
+  static const _sortOptions = [
+    SortSpec('customer', 'Customer', ascending: true),
+    SortSpec('balance', 'Balance'),
+    SortSpec('date', 'Date'),
+  ];
 
   bool get _isRep {
     final u = ref.read(authProvider).user;
@@ -55,22 +73,11 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
 
   String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  (String?, String?) _rangeParams() {
-    final now = DateTime.now();
-    switch (_period) {
-      case _Period.all:
-        return (null, null);
-      case _Period.week:
-        final start = now.subtract(Duration(days: now.weekday - 1));
-        return (_d(start), _d(now));
-      case _Period.month:
-        return (_d(DateTime(now.year, now.month, 1)), _d(now));
-      case _Period.custom:
-        final r = _customRange;
-        if (r == null) return (null, null);
-        return (_d(r.start), _d(r.end));
-    }
-  }
+  /// Signature of the server-relevant filter fields — used to decide whether an
+  /// edited filter needs a re-fetch (period/date/FY) or just a client re-render
+  /// (district is applied locally).
+  String _serverSig(ListFilterState f) =>
+      '${f.period}|${f.dateFromParam}|${f.dateToParam}|${f.financialYearId}';
 
   Future<void> _loadReps() async {
     try {
@@ -85,11 +92,15 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      final (from, to) = _rangeParams();
+      final f = _filter;
+      final hasPeriod = f.period != null && f.period!.isNotEmpty;
       final data = await client.get(ApiConstants.collections, queryParams: {
         if (_repId != null) 'repId': '$_repId',
-        if (from != null) 'dateFrom': from,
-        if (to != null) 'dateTo': to,
+        if (_status != 'All') 'status': _status,
+        if (f.financialYearId != null && f.financialYearId!.isNotEmpty) 'financialYearId': f.financialYearId!,
+        if (hasPeriod) 'period': f.period!,
+        if (!hasPeriod && f.dateFromParam != null) 'dateFrom': f.dateFromParam!,
+        if (!hasPeriod && f.dateToParam != null) 'dateTo': f.dateToParam!,
       });
       if (!mounted) return;
       setState(() {
@@ -105,16 +116,77 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
     }
   }
 
+  /// Distinct districts across the loaded book — feeds the client-side District
+  /// filter in the sheet.
+  List<String> _distinctDistricts() {
+    final set = <String>{};
+    for (final c in _all) {
+      final d = (c.district ?? '').trim();
+      if (d.isNotEmpty) set.add(d);
+    }
+    final list = set.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  /// Search + client District filter, then optional sort.
   List<Collection> get _visible {
     final q = _search.trim().toLowerCase();
-    return _all.where((c) {
-      if (_status != 'All' && c.status.toLowerCase() != _status.toLowerCase()) return false;
+    final district = _filter.select('district');
+    var list = _all.where((c) {
+      if (district != null && district.isNotEmpty && (c.district ?? '') != district) return false;
       if (q.isEmpty) return true;
       return (c.customerName ?? '').toLowerCase().contains(q) ||
           (c.invoiceNo ?? '').toLowerCase().contains(q) ||
           (c.representativeName ?? '').toLowerCase().contains(q) ||
-          (c.city ?? '').toLowerCase().contains(q);
+          (c.city ?? '').toLowerCase().contains(q) ||
+          (c.district ?? '').toLowerCase().contains(q);
     }).toList();
+
+    final sort = _sort;
+    if (sort != null) {
+      list = applySort<Collection>(list, sort, (c, key) {
+        switch (key) {
+          case 'customer':
+            return (c.customerName ?? '').toLowerCase();
+          case 'balance':
+            return c.balanceAmount;
+          case 'date':
+            return c.assignedDate;
+        }
+        return null;
+      });
+    }
+    return list;
+  }
+
+  (String, String) _groupKeyLabel(Collection c) {
+    switch (_group) {
+      case _GroupBy.rep:
+        final n = (c.representativeName ?? '').trim();
+        return n.isEmpty ? ('__none', 'Unassigned') : (n, n);
+      case _GroupBy.area:
+        final d = (c.district ?? '').trim();
+        final v = d.isNotEmpty ? d : (c.city ?? '').trim();
+        return v.isEmpty ? ('__none', 'No area') : (v, v);
+      case _GroupBy.customer:
+        final n = (c.customerName ?? '').trim();
+        return n.isEmpty ? ('__none', 'Customer') : (n, n);
+      case _GroupBy.none:
+        return ('', '');
+    }
+  }
+
+  List<_Group> _buildGroups(List<Collection> items) {
+    final map = <String, _Group>{};
+    for (final c in items) {
+      final (key, label) = _groupKeyLabel(c);
+      final g = map.putIfAbsent(key, () => _Group(key, label));
+      g.items.add(c);
+      g.bill += c.totalOutstanding;
+      g.collected += c.collectedAmount ?? 0;
+      g.balance += c.balanceAmount;
+    }
+    return map.values.toList()..sort((a, b) => b.balance.compareTo(a.balance));
   }
 
   Color _statusColor(String s) => switch (s.toLowerCase()) {
@@ -124,18 +196,24 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
         _ => const Color(0xFF2563EB), // Pending
       };
 
-  Future<void> _pickCustomRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 3),
-      lastDate: now,
-      initialDateRange: _customRange,
+  Future<void> _openFilters() async {
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final districts = _distinctDistricts();
+    final before = _serverSig(_filter);
+    final result = await showListFilterSheet(
+      context,
+      initial: _filter,
+      financialYears: fyData.years,
+      selects: [
+        if (districts.isNotEmpty)
+          SelectFilter(key: 'district', label: 'District', options: districts),
+      ],
     );
-    if (picked != null) {
-      setState(() { _period = _Period.custom; _customRange = picked; });
-      _load();
-    }
+    if (result == null || !mounted) return;
+    final serverChanged = before != _serverSig(result);
+    setState(() => _filter = result);
+    if (serverChanged) _load();
   }
 
   // Distinct customers in the loaded book → pick one for a PDF / WhatsApp statement.
@@ -235,6 +313,23 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
     final visible = _visible;
     final isRep = _isRep;
 
+    // Flatten into renderable entries so grouped sections stay lazy in the builder.
+    final entries = <_Entry>[];
+    if (_group == _GroupBy.none) {
+      for (final c in visible) {
+        entries.add(_Entry.card(c));
+      }
+    } else {
+      for (final g in _buildGroups(visible)) {
+        entries.add(_Entry.header(g));
+        if (!_collapsed.contains(g.key)) {
+          for (final c in g.items) {
+            entries.add(_Entry.card(c));
+          }
+        }
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -255,10 +350,12 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
                   onRefresh: _load,
                   child: ListView.builder(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-                    itemCount: visible.length + 1,
+                    itemCount: entries.length + 1,
                     itemBuilder: (ctx, i) {
                       if (i == 0) return _header(visible, isRep);
-                      return _card(visible[i - 1], showRep: !isRep);
+                      final e = entries[i - 1];
+                      if (e.isHeader) return _groupHeader(e.group!);
+                      return _card(e.card!, showRep: !isRep && _group != _GroupBy.rep);
                     },
                   ),
                 ),
@@ -343,29 +440,7 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
         ),
         const SizedBox(height: 10),
       ],
-      // ── Period chips ──
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          _periodChip('All time', _Period.all),
-          _periodChip('This week', _Period.week),
-          _periodChip('This month', _Period.month),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(_period == _Period.custom && _customRange != null
-                  ? '${_d(_customRange!.start)} → ${_d(_customRange!.end)}'
-                  : 'Custom…'),
-              selected: _period == _Period.custom,
-              onSelected: (_) => _pickCustomRange(),
-              selectedColor: _teal.withValues(alpha: 0.15),
-              labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _period == _Period.custom ? _teal : AppColors.textSecondary),
-            ),
-          ),
-        ]),
-      ),
-      const SizedBox(height: 8),
-      // ── Status chips ──
+      // ── Status chips (server-side) ──
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(children: _statuses.map((s) {
@@ -376,7 +451,7 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
             child: ChoiceChip(
               label: Text(s),
               selected: sel,
-              onSelected: (_) => setState(() => _status = s),
+              onSelected: (_) { if (_status == s) return; setState(() => _status = s); _load(); },
               selectedColor: c.withValues(alpha: 0.15),
               labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? c : AppColors.textSecondary),
             ),
@@ -388,7 +463,7 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
       TextField(
         onChanged: (v) => setState(() => _search = v),
         decoration: InputDecoration(
-          hintText: 'Search customer, invoice, rep or city…',
+          hintText: 'Search customer, invoice, rep, city or district…',
           prefixIcon: const Icon(Icons.search, size: 20),
           isDense: true,
           filled: true,
@@ -397,6 +472,27 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
         ),
+      ),
+      const SizedBox(height: 10),
+      // ── Filters + Sort ──
+      FilterSortButtons(
+        activeFilterCount: _filter.activeCount,
+        onFilterTap: _openFilters,
+        sortOptions: _sortOptions,
+        currentSort: _sort,
+        onSortChanged: (s) => setState(() => _sort = s),
+        padding: const EdgeInsets.only(bottom: 10),
+      ),
+      // ── Group-by ──
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          const Padding(padding: EdgeInsets.only(right: 6), child: Icon(Icons.workspaces_outline, size: 16, color: AppColors.textMuted)),
+          _groupChip('No grouping', _GroupBy.none),
+          _groupChip('By rep', _GroupBy.rep),
+          _groupChip('By area', _GroupBy.area),
+          _groupChip('By customer', _GroupBy.customer),
+        ]),
       ),
       const SizedBox(height: 12),
       Text('${visible.length} assignment${visible.length == 1 ? '' : 's'}',
@@ -407,26 +503,74 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
     ]);
   }
 
+  Widget _groupChip(String label, _GroupBy g) {
+    final sel = _group == g;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: sel,
+        onSelected: (_) => setState(() { _group = g; _collapsed.clear(); }),
+        selectedColor: _teal.withValues(alpha: 0.15),
+        labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? _teal : AppColors.textSecondary),
+      ),
+    );
+  }
+
+  Widget _groupHeader(_Group g) {
+    final open = !_collapsed.contains(g.key);
+    final pct = g.bill > 0 ? (g.collected / g.bill).clamp(0.0, 1.0) : 0.0;
+    return InkWell(
+      onTap: () => setState(() {
+        if (open) {
+          _collapsed.add(g.key);
+        } else {
+          _collapsed.remove(g.key);
+        }
+      }),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(children: [
+          Icon(open ? Icons.keyboard_arrow_down : Icons.chevron_right, size: 22, color: AppColors.textMuted),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(child: Text(g.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: _teal))),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8)),
+                  child: Text('${g.items.length}', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text('${(pct * 100).toStringAsFixed(0)}% collected', style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(CurrencyUtils.format(g.balance), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: g.balance > 0 ? AppColors.danger : AppColors.success)),
+            Text('of ${CurrencyUtils.format(g.bill)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          ]),
+        ]),
+      ),
+    );
+  }
+
   Widget _heroCount(String label, int n) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('$n', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white)),
           Text(label, style: TextStyle(fontSize: 10.5, color: Colors.white.withValues(alpha: 0.75), fontWeight: FontWeight.w600)),
         ]),
       );
-
-  Widget _periodChip(String label, _Period p) {
-    final sel = _period == p;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: sel,
-        onSelected: (_) { setState(() { _period = p; _customRange = null; }); _load(); },
-        selectedColor: _teal.withValues(alpha: 0.15),
-        labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sel ? _teal : AppColors.textSecondary),
-      ),
-    );
-  }
 
   Widget _card(Collection c, {required bool showRep}) {
     final sc = _statusColor(c.status);
@@ -518,6 +662,27 @@ class _CollectionListScreenState extends ConsumerState<CollectionListScreen> {
               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: color ?? AppColors.textPrimary)),
         ]),
       );
+}
+
+/// One collapsible group section (rep / area / customer) with running subtotals.
+class _Group {
+  _Group(this.key, this.label);
+  final String key;
+  final String label;
+  final List<Collection> items = [];
+  double bill = 0;
+  double collected = 0;
+  double balance = 0;
+}
+
+/// A flattened list entry — either a group header or a collection card — so the
+/// grouped list stays lazy inside a single ListView.builder.
+class _Entry {
+  final _Group? group;
+  final Collection? card;
+  _Entry.header(this.group) : card = null;
+  _Entry.card(this.card) : group = null;
+  bool get isHeader => group != null;
 }
 
 /// One customer's aggregated collection line for the statement picker.

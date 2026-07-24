@@ -16,6 +16,7 @@ class GstComplianceRepository {
   static const _ewayPath = '/api/gst-compliance/eway-bill';
   static const _logsPath = '/api/gst-compliance/logs';
   static const _tallyReviewPath = '/api/gst/tally-review';
+  static const _legalEntitiesPath = '/api/legal-entities';
 
   /// The register endpoints return a bare ARRAY; stay tolerant of a wrapped shape.
   List<Map<String, dynamic>> _asList(dynamic data) {
@@ -50,8 +51,27 @@ class GstComplianceRepository {
   }
 
   /// GSTR-1 (Tally export) review for a window — both dates required, `YYYY-MM-DD`.
-  Future<GstReturnsReview> gstTallyReview(String fromDate, String toDate) async {
-    final data = await _client.get(_tallyReviewPath, queryParams: {'fromDate': fromDate, 'toDate': toDate});
+  /// [financialYearId] / [legalEntityId] are optional SERVER-side filters (the same
+  /// query params the web returns-review page threads to `/gst/tally-review`).
+  Future<GstReturnsReview> gstTallyReview(
+    String fromDate,
+    String toDate, {
+    String? financialYearId,
+    String? legalEntityId,
+  }) async {
+    final qp = <String, dynamic>{'fromDate': fromDate, 'toDate': toDate};
+    if (financialYearId != null && financialYearId.isNotEmpty) qp['financialYearId'] = financialYearId;
+    if (legalEntityId != null && legalEntityId.isNotEmpty) qp['legalEntityId'] = legalEntityId;
+    final data = await _client.get(_tallyReviewPath, queryParams: qp);
     return GstReturnsReview.fromJson(data is Map ? data.cast<String, dynamic>() : const {});
+  }
+
+  /// The company's legal entities (multi-GSTIN) for the "GST registration" filter.
+  /// Uses the same bare `/api/legal-entities` list the web GST page reads — carries
+  /// `gstNumber` so the dropdown can show "Name · GSTIN". Returns [] on any error so
+  /// the filter simply hides for single-entity companies rather than breaking a screen.
+  Future<List<LegalEntityLite>> legalEntities() async {
+    final data = await _client.get(_legalEntitiesPath);
+    return _asList(data).map(LegalEntityLite.fromJson).where((e) => e.isValid).toList();
   }
 }

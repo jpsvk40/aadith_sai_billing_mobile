@@ -4,15 +4,26 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../data/models/gst_compliance_model.dart';
 import '../../../data/network/api_client.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../providers/gst_compliance_providers.dart';
 
 const _teal = Color(0xFF0891B2);
 
 /// GST summary (read-only) — GSTR-1 style outward-supply breakdown for a month:
 /// B2B / B2C-Small / B2C-Large counts & values, with month navigation.
+///
+/// Filters (parity with the web GSTReturns page):
+///  • Financial Year — server-side (`financialYearId` on /gst/summary).
+///  • Legal Entity (multi-GSTIN) — server-side (`legalEntityId` on /gst/summary),
+///    sourced from `/api/legal-entities` like the web dropdown.
+///  • B2B / B2C section tabs — client-side split of the single summary response
+///    (the endpoint has no `section` param; it always returns b2b/b2cs/b2cl).
 class GstScreen extends ConsumerStatefulWidget {
   const GstScreen({super.key});
   @override
@@ -25,6 +36,13 @@ class _GstScreenState extends ConsumerState<GstScreen> {
   bool _loading = true;
   String? _error;
 
+  // Shared filter state — carries `financialYearId` + the chosen legal-entity label.
+  ListFilterState _filter = ListFilterState();
+  List<LegalEntityLite> _entities = const [];
+
+  // Active section tab: 'b2b' (registered) or 'b2c' (b2cs + b2cl consumer sales).
+  String _section = 'b2b';
+
   static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   @override
@@ -32,10 +50,32 @@ class _GstScreenState extends ConsumerState<GstScreen> {
     super.initState();
     final now = DateTime.now();
     _month = DateTime(now.year, now.month);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _preloadEntities();
+      _load();
+    });
   }
 
   String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // Legal entities are optional — preload quietly so the picker is ready on first open.
+  Future<void> _preloadEntities() async {
+    try {
+      final list = await ref.read(legalEntitiesProvider.future);
+      if (!mounted || list.isEmpty) return;
+      setState(() => _entities = list);
+    } catch (_) {/* single-entity company or no access — filter simply hides */}
+  }
+
+  /// Maps the chosen dropdown label back to the server `legalEntityId`.
+  String? get _legalEntityId {
+    final label = _filter.selects['legalEntity'];
+    if (label == null || label.isEmpty) return null;
+    for (final e in _entities) {
+      if (e.filterLabel == label) return e.id;
+    }
+    return null;
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
@@ -43,7 +83,12 @@ class _GstScreenState extends ConsumerState<GstScreen> {
       final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
       final from = _month;
       final to = DateTime(_month.year, _month.month + 1, 0); // last day of month
-      final data = await client.get(ApiConstants.gstSummary, queryParams: {'fromDate': _d(from), 'toDate': _d(to)});
+      final qp = <String, dynamic>{'fromDate': _d(from), 'toDate': _d(to)};
+      final fyId = _filter.financialYearId;
+      if (fyId != null && fyId.isNotEmpty) qp['financialYearId'] = fyId;
+      final leId = _legalEntityId;
+      if (leId != null && leId.isNotEmpty) qp['legalEntityId'] = leId;
+      final data = await client.get(ApiConstants.gstSummary, queryParams: qp);
       if (!mounted) return;
       setState(() { _data = data is Map ? data.cast<String, dynamic>() : const {}; _loading = false; });
     } catch (e) {
@@ -57,6 +102,43 @@ class _GstScreenState extends ConsumerState<GstScreen> {
     _load();
   }
 
+  // Opens the shared filter sheet with only Financial Year + Legal Entity (the
+  // month navigator already owns the date window, so periods/date-range are hidden).
+  Future<void> _openFilters() async {
+    final fy = await ref.read(financialYearsProvider.future);
+    var entities = _entities;
+    if (entities.isEmpty) {
+      try {
+        entities = await ref.read(legalEntitiesProvider.future);
+      } catch (_) {/* keep empty */}
+    }
+    if (!mounted) return;
+    if (entities.isNotEmpty && _entities.isEmpty) setState(() => _entities = entities);
+
+    final result = await showListFilterSheet(
+      context,
+      initial: _filter,
+      showPeriods: false,
+      showDateRange: false,
+      financialYears: fy.years,
+      selects: entities.isEmpty
+          ? const []
+          : [
+              SelectFilter(
+                key: 'legalEntity',
+                label: 'GST Registration',
+                allLabel: 'All GST registrations',
+                options: entities.map((e) => e.filterLabel).toList(),
+              ),
+            ],
+      title: 'GST filters',
+    );
+    if (result != null) {
+      setState(() => _filter = result);
+      _load();
+    }
+  }
+
   double _num(dynamic v) => double.tryParse(v?.toString() ?? '') ?? 0;
   Map<String, dynamic> _bucket(String key) => (_data[key] is Map) ? (_data[key] as Map).cast<String, dynamic>() : const {};
 
@@ -65,7 +147,17 @@ class _GstScreenState extends ConsumerState<GstScreen> {
     final b2b = _bucket('b2b');
     final b2cs = _bucket('b2cs');
     final b2cl = _bucket('b2cl');
-    final totalValue = _num(b2b['value']) + _num(b2cs['value']) + _num(b2cl['value']);
+    final b2bCount = _num(b2b['count']).toInt();
+    final b2bValue = _num(b2b['value']);
+    final b2cCount = _num(b2cs['count']).toInt() + _num(b2cl['count']).toInt();
+    final b2cValue = _num(b2cs['value']) + _num(b2cl['value']);
+    final totalValue = b2bValue + b2cValue;
+    final gstin = (_data['supplierGstin']?.toString().isNotEmpty == true)
+        ? _data['supplierGstin'].toString()
+        : (_data['companyGstin']?.toString() ?? '');
+    final selectedEntity = (_data['selectedLegalEntity'] is Map)
+        ? (_data['selectedLegalEntity'] as Map)['name']?.toString()
+        : null;
     final isCurrentMonth = _month.year == DateTime.now().year && _month.month == DateTime.now().month;
 
     return Scaffold(
@@ -82,6 +174,12 @@ class _GstScreenState extends ConsumerState<GstScreen> {
             Expanded(child: Center(child: Text('${_monthNames[_month.month - 1]} ${_month.year}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)))),
             IconButton(icon: const Icon(Icons.chevron_right), onPressed: _loading || isCurrentMonth ? null : () => _shiftMonth(1)),
           ]),
+        ),
+        // Filters (Financial Year + Legal Entity) — server-side.
+        FilterSortButtons(
+          activeFilterCount: _filter.activeCount,
+          onFilterTap: _openFilters,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
         ),
         Expanded(
           child: _loading
@@ -109,13 +207,17 @@ class _GstScreenState extends ConsumerState<GstScreen> {
                                   const SizedBox(width: 5),
                                   Text('${_data['totalInvoices'] ?? 0} invoices', style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
                                   const Spacer(),
-                                  if ((_data['companyGstin'] ?? '').toString().isNotEmpty)
+                                  if (gstin.isNotEmpty)
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
-                                      child: Text(_data['companyGstin'].toString(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                                      child: Text(gstin, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
                                     ),
                                 ]),
+                                if (selectedEntity != null && selectedEntity.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text('Legal entity: $selectedEntity', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w600)),
+                                ],
                               ]),
                             ]),
                           ),
@@ -123,9 +225,16 @@ class _GstScreenState extends ConsumerState<GstScreen> {
                         const SizedBox(height: 16),
                         const Text('Supply breakdown', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                         const SizedBox(height: 10),
-                        _bucketCard('B2B', 'Registered buyers (with GSTIN)', b2b, const Color(0xFF2563EB), Icons.business_outlined),
-                        _bucketCard('B2C Small', 'Consumer sales (intra-state / ≤ ₹2.5L)', b2cs, const Color(0xFF16A34A), Icons.people_outline),
-                        _bucketCard('B2C Large', 'Inter-state consumer > ₹2.5L', b2cl, const Color(0xFF9333EA), Icons.local_shipping_outlined),
+                        _sectionTabs(),
+                        const SizedBox(height: 12),
+                        if (_section == 'b2b') ...[
+                          _bucketCard('B2B', 'Registered buyers (with GSTIN)', b2b, const Color(0xFF2563EB), Icons.business_outlined),
+                          _sectionTotal('B2B total', b2bCount, b2bValue, const Color(0xFF2563EB)),
+                        ] else ...[
+                          _bucketCard('B2C Small', 'Consumer sales (intra-state / ≤ ₹2.5L)', b2cs, const Color(0xFF16A34A), Icons.people_outline),
+                          _bucketCard('B2C Large', 'Inter-state consumer > ₹2.5L', b2cl, const Color(0xFF9333EA), Icons.local_shipping_outlined),
+                          _sectionTotal('B2C total', b2cCount, b2cValue, const Color(0xFF16A34A)),
+                        ],
                         const SizedBox(height: 16),
                         const Text('Registers & returns', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
                         const SizedBox(height: 10),
@@ -149,6 +258,47 @@ class _GstScreenState extends ConsumerState<GstScreen> {
       ]),
     );
   }
+
+  // Segmented B2B / B2C control — client-side section split of the summary response.
+  Widget _sectionTabs() {
+    Widget tab(String id, String label) {
+      final active = _section == id;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _section = id),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: active ? AppColors.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Text(label, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: active ? Colors.white : AppColors.textSecondary)),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [tab('b2b', 'B2B'), const SizedBox(width: 4), tab('b2c', 'B2C')]),
+    );
+  }
+
+  Widget _sectionTotal(String label, int count, double value, Color color) => Container(
+        margin: const EdgeInsets.only(top: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.30))),
+        child: Row(children: [
+          Expanded(child: Text(label, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: color))),
+          Text('$count invoice${count == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 10),
+          Text(CurrencyUtils.format(value), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: color)),
+        ]),
+      );
 
   Widget _linkTile(BuildContext context, IconData icon, String title, String subtitle, Color color, String route) => Container(
         margin: const EdgeInsets.only(bottom: 10),

@@ -39,14 +39,17 @@ Future<bool> pumpUntilGone(WidgetTester tester, Finder finder,
 /// Deep-link to [route], confirm the shared "Filters" + "Sort" controls rendered,
 /// open the bottom sheet, confirm it built (its Apply button), then dismiss it.
 Future<void> checkFilterSheet(WidgetTester tester, String route, String label,
-    {bool expectFinancialYear = false}) async {
+    {bool expectFinancialYear = false, bool requireSort = true}) async {
   await goTo(tester, route);
 
   final filtersBtn = find.text('Filters').hitTestable();
   expect(await pumpUntilFound(tester, filtersBtn), true,
       reason: '$label ($route): Filters button did not render');
-  expect(find.text('Sort').hitTestable().evaluate().isNotEmpty, true,
-      reason: '$label ($route): Sort control did not render');
+  if (requireSort) {
+    // Button reads "Sort" or "Sort · <active>" when a default sort is set.
+    expect(find.textContaining('Sort').hitTestable().evaluate().isNotEmpty, true,
+        reason: '$label ($route): Sort control did not render');
+  }
 
   await tester.tap(filtersBtn.first);
   final sheetOpen = await pumpUntilFound(tester, find.text('Apply'));
@@ -75,6 +78,16 @@ Future<void> checkFilterSheet(WidgetTester tester, String route, String label,
       reason: '$label ($route): did not return to the list after closing filters');
 }
 
+/// Lighter check for screens whose new controls aren't a Filters+Sort sheet
+/// (e.g. GST Returns filter button without a sort menu; Rep Commission tabs):
+/// confirm the route renders (not redirected to /unauthorized) by finding an anchor.
+Future<void> checkRenders(WidgetTester tester, String route, String anchor, String label) async {
+  await goTo(tester, route);
+  // textContaining so anchors like "Reps" match "Reps (0)".
+  expect(await pumpUntilFound(tester, find.textContaining(anchor).hitTestable(), timeout: const Duration(seconds: 20)), true,
+      reason: '$label ($route): screen did not render (anchor "$anchor" not found)');
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -101,6 +114,16 @@ void main() {
     await checkFilterSheet(tester, '/gst-bills', 'GST Bills');
     await checkFilterSheet(tester, '/finance/inventory/entries/history', 'Stock Entries history');
     await checkFilterSheet(tester, '/machinery/logbook', 'Machinery Logbook');
+    // Previously-pending list screens — now closed (co17 has collections+dispatch added).
+    await checkFilterSheet(tester, '/receivables', 'Outstanding / Receivables');
+    await checkFilterSheet(tester, '/collections', 'Collections');
+    await checkFilterSheet(tester, '/finance/inventory/stock', 'Inventory Stock');
+    await checkFilterSheet(tester, '/dispatch', 'Dispatch Queue');
+    // RMA has no units for this QA company (empty → full-screen empty state, no header) — render check.
+    await checkRenders(tester, '/service/rma/outstanding', 'Out at Company', 'RMA Outstanding');
+    // These added filters/tabs without a Sort menu — render check only.
+    await checkFilterSheet(tester, '/finance/gst/returns', 'GST Returns', requireSort: false);
+    await checkRenders(tester, '/commissions', 'Reps', 'Rep Commission');
     // NOTE: /finance/expenses is gated by the `finance_accounts` module, which the
     // mobileqa persona lacks — its FilterSortButtons wiring is verified by analyze +
     // build + inspection instead.

@@ -7,8 +7,10 @@ import '../../../core/utils/pdf_share.dart';
 import '../../../data/models/collection_model.dart';
 import '../../../data/network/api_client.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../providers/receivables_provider.dart';
 
 /// Receivables Hub — a single Outstanding list. Each customer row carries inline
 /// Pay + WA actions, so no separate Send-WA / Payment tabs are needed. Finance can
@@ -25,10 +27,21 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
   bool _loading = true;
   String? _error;
 
-  final String _filterDistrict = ''; // reserved for a future area filter; inert for now
   String _filterRep = ''; // '' = all reps, '__unassigned__' = customers with an unassigned balance
   String _filterLens = 'all'; // all, unassigned, pending, partial, promised
   String _search = '';
+
+  // Shared filter sheet + multi-key sort (mirrors the web Outstanding controls).
+  // The sheet carries As-of / Invoices-from dates (server params) plus Overdue-aging
+  // and District selects (client-side); sort runs over the loaded rows via applySort.
+  ListFilterState _filter = ListFilterState();
+  SortSpec _sort = const SortSpec('amount', 'Highest Outstanding');
+
+  static const List<SortSpec> _sortOptions = [
+    SortSpec('amount', 'Highest Outstanding'), // totalOutstanding desc
+    SortSpec('oldest', 'Oldest Overdue'), // oldestOverdueDays desc
+    SortSpec('name', 'Customer Name', ascending: true), // customerName A→Z
+  ];
 
   static const String _repUnassigned = '__unassigned__';
 
@@ -56,11 +69,84 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
     return list;
   }
 
+  /// Distinct districts present in the loaded data (sorted), for the District select.
+  List<String> _districtOptions() {
+    final customers = (_hubData?['customers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final set = <String>{};
+    for (final c in customers) {
+      final d = c['district'] as String?;
+      if (d != null && d.isNotEmpty) set.add(d);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  /// Resolves the Overdue-aging select ('30+ days' → 30, …) to a min-overdue-days cut.
+  int _minOverdueDaysOf(ListFilterState f) {
+    switch (f.select('overdue')) {
+      case '30+ days':
+        return 30;
+      case '60+ days':
+        return 60;
+      case '90+ days':
+        return 90;
+    }
+    return 0;
+  }
+
+  /// Comparable extractor for [applySort] over the loaded customer rows.
+  Comparable? _sortValue(Map<String, dynamic> c, String key) {
+    switch (key) {
+      case 'amount':
+        return (c['totalOutstanding'] as num?)?.toDouble() ?? 0;
+      case 'oldest':
+        return (c['oldestOverdueDays'] as num?)?.toInt() ?? 0;
+      case 'name':
+        return (c['customerName'] as String? ?? '').toLowerCase();
+    }
+    return null;
+  }
+
+  /// Opens the shared filter sheet; reloads from the server only when a server-side
+  /// param (As-of / Invoices-from / min-overdue) actually changed.
+  Future<void> _openFilterSheet() async {
+    final districts = _districtOptions();
+    final result = await showListFilterSheet(
+      context,
+      initial: _filter,
+      showPeriods: false, // an as-of snapshot, not a period report
+      showDateRange: true, // From = Invoices-from, To = As-of
+      selects: [
+        const SelectFilter(
+          key: 'overdue',
+          label: 'Overdue Aging',
+          options: ['30+ days', '60+ days', '90+ days'],
+          allLabel: 'All ages',
+        ),
+        if (districts.isNotEmpty)
+          SelectFilter(key: 'district', label: 'District', options: districts, allLabel: 'All districts'),
+      ],
+    );
+    if (!mounted || result == null) return;
+    final serverChanged = result.dateFromParam != _filter.dateFromParam ||
+        result.dateToParam != _filter.dateToParam ||
+        _minOverdueDaysOf(result) != _minOverdueDaysOf(_filter);
+    setState(() => _filter = result);
+    if (serverChanged) _load();
+  }
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
       final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      final data = await client.get(ApiConstants.customerOutstanding);
+      // Thread the server-side params the filter sheet controls: balances As-of a
+      // date, only invoices dated From a date, and (optionally) a minimum overdue cut.
+      final query = ReceivablesQuery(
+        asOfDate: _filter.dateToParam,
+        fromDate: _filter.dateFromParam,
+        minOverdueDays: _minOverdueDaysOf(_filter),
+      );
+      final data = await client.get(ApiConstants.customerOutstanding, queryParams: query.toQueryParams());
       if (!mounted) return;
       setState(() {
         _hubData = data is Map ? data.cast<String, dynamic>() : {};
@@ -77,9 +163,28 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
 
   List<Map<String, dynamic>> _filterCustomers() {
     final customers = (_hubData?['customers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final q = _search.trim().toLowerCase();
+    final district = _filter.select('district');
+    final minOverdue = _minOverdueDaysOf(_filter);
     return customers.where((c) {
-      if (_search.isNotEmpty && !(c['customerName'] as String? ?? '').toLowerCase().contains(_search.toLowerCase())) return false;
-      if (_filterDistrict.isNotEmpty && (c['district'] as String? ?? '') != _filterDistrict) return false;
+      // Search widened to city / phone / whatsapp / invoice no / Tally voucher no.
+      if (q.isNotEmpty) {
+        final name = (c['customerName'] as String? ?? '').toLowerCase();
+        final city = (c['city'] as String? ?? '').toLowerCase();
+        final phone = (c['phone'] as String? ?? '').toLowerCase();
+        final wa = (c['whatsapp'] as String? ?? '').toLowerCase();
+        final invMatch = ((c['invoices'] as List?) ?? const []).whereType<Map>().any((i) =>
+            (i['invoiceNo'] as String? ?? '').toLowerCase().contains(q) ||
+            (i['tallyVoucherNo'] as String? ?? '').toLowerCase().contains(q));
+        if (!name.contains(q) && !city.contains(q) && !phone.contains(q) && !wa.contains(q) && !invMatch) {
+          return false;
+        }
+      }
+      // District — client-side SelectFilter over distinct districts in the loaded rows.
+      if (district != null && district.isNotEmpty && (c['district'] as String? ?? '') != district) return false;
+      // Overdue aging — keep customers whose oldest bill is at least N days overdue.
+      // (Also threaded server-side via minOverdueDays; this keeps re-filtering instant.)
+      if (minOverdue > 0 && ((c['oldestOverdueDays'] as num?)?.toInt() ?? 0) < minOverdue) return false;
       if (_filterRep.isNotEmpty) {
         final reps = (c['reps'] as List?)?.whereType<Map>().toList() ?? [];
         if (_filterRep == _repUnassigned) {
@@ -215,9 +320,33 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
     return '₹${n.toStringAsFixed(0)}';
   }
 
+  /// A compact 5-segment aging bar (current / 1-30 / 31-60 / 61-90 / 90+), mirroring
+  /// the web AgingStrip. Returns an empty box when the row carries no aging buckets.
+  Widget _agingStrip(Map<String, dynamic>? aging, double total) {
+    if (aging == null || total <= 0) return const SizedBox.shrink();
+    const segments = <(String, Color)>[
+      ('current', Color(0xFF22C55E)),
+      ('d1_30', Color(0xFFEAB308)),
+      ('d31_60', Color(0xFFF97316)),
+      ('d61_90', Color(0xFFEF4444)),
+      ('d90p', Color(0xFF7F1D1D)),
+    ];
+    final bars = <Widget>[];
+    for (final (key, color) in segments) {
+      final v = (aging[key] as num?)?.toDouble() ?? 0;
+      if (v <= 0) continue;
+      bars.add(Expanded(flex: ((v / total) * 1000).round().clamp(1, 1000), child: Container(color: color)));
+    }
+    if (bars.isEmpty) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(height: 6, child: Row(children: bars)),
+    );
+  }
+
   // ── Outstanding list (search / lens / rep filters + customer cards). ──
   Widget _buildOutstandingTab() {
-    final filtered = _filterCustomers();
+    final filtered = applySort(_filterCustomers(), _sort, _sortValue);
     final filteredTotal = filtered.fold<double>(0, (s, c) => s + ((c['totalOutstanding'] as num?)?.toDouble() ?? 0));
 
     return SingleChildScrollView(
@@ -235,11 +364,21 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
                   TextField(
                     onChanged: (v) => setState(() => _search = v),
                     decoration: InputDecoration(
-                      hintText: 'Search customer...',
+                      hintText: 'Search name, city, phone, invoice no…',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Filters (As-of / Invoices-from / Overdue aging / District) + Sort.
+                  FilterSortButtons(
+                    activeFilterCount: _filter.activeCount,
+                    onFilterTap: _openFilterSheet,
+                    sortOptions: _sortOptions,
+                    currentSort: _sort,
+                    onSortChanged: (s) => setState(() => _sort = s),
+                    padding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 10),
                   SingleChildScrollView(
@@ -343,6 +482,16 @@ class _ReceivablesHubScreenState extends ConsumerState<ReceivablesHubScreen> {
                             Text('₹${fmt(total)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFFDC2626))),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        // Aging distribution (current → 90d+) + oldest-overdue caption.
+                        _agingStrip((c['aging'] as Map?)?.cast<String, dynamic>(), total),
+                        if (((c['oldestOverdueDays'] as num?)?.toInt() ?? 0) > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'oldest ${(c['oldestOverdueDays'] as num).toInt()}d overdue',
+                            style: TextStyle(fontSize: 10.5, color: Colors.grey[600]),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         // Coverage bar
                         ClipRRect(

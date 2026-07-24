@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/gst_compliance_model.dart';
+import '../../../data/providers/financial_year_provider.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../providers/gst_compliance_providers.dart';
 
 /// GST Returns review (GSTR-1 / Tally) — parity with the web returns-review page.
@@ -17,6 +19,11 @@ class GstReturnsReviewScreen extends ConsumerStatefulWidget {
 class _GstReturnsReviewScreenState extends ConsumerState<GstReturnsReviewScreen> {
   late DateTime _month; // first day of the selected month
 
+  // Shared filter state — carries `financialYearId` + the chosen legal-entity label.
+  // Both are threaded server-side to /gst/tally-review via the provider family key.
+  ListFilterState _filter = ListFilterState();
+  List<LegalEntityLite> _entities = const [];
+
   static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   @override
@@ -24,17 +31,77 @@ class _GstReturnsReviewScreenState extends ConsumerState<GstReturnsReviewScreen>
     super.initState();
     final now = DateTime.now();
     _month = DateTime(now.year, now.month);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _preloadEntities());
   }
 
   String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   void _shiftMonth(int delta) => setState(() => _month = DateTime(_month.year, _month.month + delta));
 
+  // Legal entities are optional — preload quietly so the picker is ready on first open.
+  Future<void> _preloadEntities() async {
+    try {
+      final list = await ref.read(legalEntitiesProvider.future);
+      if (!mounted || list.isEmpty) return;
+      setState(() => _entities = list);
+    } catch (_) {/* single-entity company or no access — filter simply hides */}
+  }
+
+  /// Maps the chosen dropdown label back to the server `legalEntityId`.
+  String? get _legalEntityId {
+    final label = _filter.selects['legalEntity'];
+    if (label == null || label.isEmpty) return null;
+    for (final e in _entities) {
+      if (e.filterLabel == label) return e.id;
+    }
+    return null;
+  }
+
+  // Opens the shared filter sheet with only Financial Year + Legal Entity (the
+  // month navigator already owns the date window, so periods/date-range are hidden).
+  Future<void> _openFilters() async {
+    final fy = await ref.read(financialYearsProvider.future);
+    var entities = _entities;
+    if (entities.isEmpty) {
+      try {
+        entities = await ref.read(legalEntitiesProvider.future);
+      } catch (_) {/* keep empty */}
+    }
+    if (!mounted) return;
+    if (entities.isNotEmpty && _entities.isEmpty) setState(() => _entities = entities);
+
+    final result = await showListFilterSheet(
+      context,
+      initial: _filter,
+      showPeriods: false,
+      showDateRange: false,
+      financialYears: fy.years,
+      selects: entities.isEmpty
+          ? const []
+          : [
+              SelectFilter(
+                key: 'legalEntity',
+                label: 'GST Registration',
+                allLabel: 'All GST registrations',
+                options: entities.map((e) => e.filterLabel).toList(),
+              ),
+            ],
+      title: 'GST filters',
+    );
+    if (result != null) setState(() => _filter = result); // provider family re-fetches on the new key
+  }
+
   @override
   Widget build(BuildContext context) {
     final from = _month;
     final to = DateTime(_month.year, _month.month + 1, 0); // last day of month
-    final range = (from: _d(from), to: _d(to));
+    final fyId = _filter.financialYearId;
+    final range = (
+      from: _d(from),
+      to: _d(to),
+      financialYearId: (fyId != null && fyId.isNotEmpty) ? fyId : null,
+      legalEntityId: _legalEntityId,
+    );
     final async = ref.watch(gstReturnsReviewProvider(range));
     final isCurrentMonth = _month.year == DateTime.now().year && _month.month == DateTime.now().month;
 
@@ -52,6 +119,12 @@ class _GstReturnsReviewScreenState extends ConsumerState<GstReturnsReviewScreen>
             Expanded(child: Center(child: Text('${_monthNames[_month.month - 1]} ${_month.year}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)))),
             IconButton(icon: const Icon(Icons.chevron_right), onPressed: isCurrentMonth ? null : () => _shiftMonth(1)),
           ]),
+        ),
+        // Filters (Financial Year + Legal Entity) — server-side.
+        FilterSortButtons(
+          activeFilterCount: _filter.activeCount,
+          onFilterTap: _openFilters,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
         ),
         Expanded(
           child: async.when(

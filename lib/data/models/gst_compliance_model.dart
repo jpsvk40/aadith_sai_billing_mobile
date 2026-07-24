@@ -205,6 +205,31 @@ class EwayStatus {
   }
 }
 
+// ─────────────────────────── Legal entities (multi-GSTIN filter) ───────────────────────────
+
+/// A lightweight legal-entity row for the "GST registration" filter. Sourced from
+/// the same `/api/legal-entities` list the web GST page uses, so the label carries
+/// the GSTIN (`name · gstNumber`) exactly like the web dropdown.
+class LegalEntityLite {
+  final String id;
+  final String name;
+  final String? gstNumber;
+
+  const LegalEntityLite({required this.id, required this.name, this.gstNumber});
+
+  factory LegalEntityLite.fromJson(Map<String, dynamic> j) => LegalEntityLite(
+        id: (j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        gstNumber: _str(j['gstNumber']),
+      );
+
+  /// Dropdown label — mirrors the web: "Name · GSTIN" when a GSTIN exists.
+  String get filterLabel =>
+      (gstNumber != null && gstNumber!.isNotEmpty) ? '$name · $gstNumber' : name;
+
+  bool get isValid => id.isNotEmpty && id != 'null' && name.isNotEmpty;
+}
+
 // ─────────────────────────── GST Returns (GSTR-1 / Tally) review ───────────────────────────
 
 /// A section bucket with a count + rupee value (e.g. b2b, b2c).
