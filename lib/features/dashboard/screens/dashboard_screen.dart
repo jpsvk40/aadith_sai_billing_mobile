@@ -1002,6 +1002,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Correspondence — letters awaiting reply are actionable on mobile.
       if (has('correspondence'))
         (Icons.mail_outline, 'Letters', const Color(0xFF0284C7), () => context.go('/correspondence')),
+      if (has('correspondence'))
+        (Icons.gavel_outlined, 'Legal Cases', const Color(0xFF6366F1), () => context.go('/correspondence/cases')),
       // Payments moved off the ERP bottom nav — keep it reachable here.
       if (has('payments'))
         (Icons.payments_outlined, 'Payments', const Color(0xFF059669), () => context.go('/payments')),

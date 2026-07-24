@@ -162,7 +162,16 @@ class _StockEntryScreenState extends ConsumerState<StockEntryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('New Stock Entry')),
+      appBar: AppBar(
+        title: const Text('New Stock Entry'),
+        actions: [
+          IconButton(
+            tooltip: 'Entry history',
+            icon: const Icon(Icons.history),
+            onPressed: () => context.push('/finance/inventory/entries/history'),
+          ),
+        ],
+      ),
       body: _loading
           ? const LoadingIndicator(message: 'Loading items & godowns…')
           : _loadError != null

@@ -20,6 +20,9 @@ String? requiredModuleForLocation(String location) {
   if (location.startsWith('/inventory/stocktake')) return 'stocktake';
   if (location.startsWith('/quotations')) return 'crm'; // Quotations & CRM leads
   if (location.startsWith('/vendor-credit-notes')) return 'vendor_purchases';
+  if (location.startsWith('/vendors')) return 'vendor_purchases'; // vendors master
+  if (location.startsWith('/procurement')) return 'vendor_purchases'; // requisitions/RFQ/PO/payment-requests
+  if (location.startsWith('/gst-bills')) return 'gst'; // GST split-invoice register
   if (location.startsWith('/credit-notes')) return 'invoices';
   if (location.startsWith('/invoices')) return 'invoices';
   // ─── Shared Back-Office Spine — module-gate each surface (deep links too) ───

@@ -132,6 +132,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
                         _linkTile(context, Icons.receipt_long_outlined, 'e-Invoice Register', 'IRNs · Ack no · status', const Color(0xFF2563EB), '/finance/gst/einvoice'),
                         _linkTile(context, Icons.local_shipping_outlined, 'e-Way Bill Register', 'EWB no · validity · vehicle', const Color(0xFF0EA5E9), '/finance/gst/eway'),
                         _linkTile(context, Icons.fact_check_outlined, 'GST Returns Review', 'GSTR-1 summary · validations', const Color(0xFF16A34A), '/finance/gst/returns'),
+                        _linkTile(context, Icons.splitscreen_outlined, 'GST Bills', 'Split invoices · void · assign GST #', const Color(0xFF7C3AED), '/gst-bills'),
                         const SizedBox(height: 6),
                         Container(
                           padding: const EdgeInsets.all(12),

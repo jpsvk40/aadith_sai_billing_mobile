@@ -59,10 +59,50 @@ class MachineryRepository {
     return MachineDiagnosis.fromJson((data as Map).cast<String, dynamic>());
   }
 
+  /// Fleet-wide logbook (GET /machinery/logs). Optional server filters mirror the web
+  /// register: [machineId] (single machine), [from]/[to] as `YYYY-MM-DD` date bounds.
+  /// The operator role is auto-scoped by the backend to its assigned machines.
+  Future<List<MachineLog>> getLogs({int? machineId, String? from, String? to}) async {
+    final data = await _client.get('${ApiConstants.machinery}/logs', queryParams: {
+      if (machineId != null) 'machineId': machineId,
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+    });
+    final list = data is List ? data : const [];
+    return list.map((e) => MachineLog.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
   Future<List<MachineTransferLite>> getTransfers() async {
     final data = await _client.get(ApiConstants.machineryTransfers);
     final list = data is List ? data : const [];
     return list.map((e) => MachineTransferLite.fromJson((e as Map).cast<String, dynamic>())).toList();
+  }
+
+  /// Raise a machine transfer (POST /machinery/transfers). Codes (TRF-…) are server
+  /// generated; empty optional fields are dropped so the API applies its own defaults.
+  Future<MachineTransferLite> createTransfer({
+    required int machineId,
+    DateTime? transferDate,
+    String? fromLocation,
+    int? toProjectId,
+    String? toLocation,
+    double? transportCost,
+    String? gatePassNo,
+    String? vehicleUsed,
+    String? notes,
+  }) async {
+    final data = await _client.post(ApiConstants.machineryTransfers, data: {
+      'machineId': machineId,
+      if (transferDate != null) 'transferDate': transferDate.toIso8601String(),
+      if (fromLocation != null && fromLocation.isNotEmpty) 'fromLocation': fromLocation,
+      if (toProjectId != null) 'toProjectId': toProjectId,
+      if (toLocation != null && toLocation.isNotEmpty) 'toLocation': toLocation,
+      if (transportCost != null) 'transportCost': transportCost,
+      if (gatePassNo != null && gatePassNo.isNotEmpty) 'gatePassNo': gatePassNo,
+      if (vehicleUsed != null && vehicleUsed.isNotEmpty) 'vehicleUsed': vehicleUsed,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return MachineTransferLite.fromJson((data as Map).cast<String, dynamic>());
   }
 
   Future<void> receiveTransfer(int id) async {

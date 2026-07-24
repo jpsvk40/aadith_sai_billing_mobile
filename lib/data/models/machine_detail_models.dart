@@ -146,10 +146,34 @@ class MachineLog {
   final double closingMeter;
   final double? workingHours;
   final double? idleHours;
+  final double? distanceKm;
   final double? fuelQty;
   final double? fuelCost;
   final String? remarks;
-  const MachineLog({required this.id, this.logDate, this.shift, this.operatorName, this.openingMeter = 0, this.closingMeter = 0, this.workingHours, this.idleHours, this.fuelQty, this.fuelCost, this.remarks});
+  // Fleet-wide logbook (GET /machinery/logs) embellishes each row with its machine
+  // + deployment. Null on the per-machine detail feed (that scope already knows the machine).
+  final String? machineName;
+  final String? machineCode;
+  final String? projectName;
+  final String? location;
+  const MachineLog({
+    required this.id,
+    this.logDate,
+    this.shift,
+    this.operatorName,
+    this.openingMeter = 0,
+    this.closingMeter = 0,
+    this.workingHours,
+    this.idleHours,
+    this.distanceKm,
+    this.fuelQty,
+    this.fuelCost,
+    this.remarks,
+    this.machineName,
+    this.machineCode,
+    this.projectName,
+    this.location,
+  });
 
   factory MachineLog.fromJson(Map<String, dynamic> j) => MachineLog(
         id: _i(j['id']),
@@ -160,9 +184,14 @@ class MachineLog {
         closingMeter: _d(j['closingMeter']),
         workingHours: _dn(j['workingHours']),
         idleHours: _dn(j['idleHours']),
+        distanceKm: _dn(j['distanceKm']),
         fuelQty: _dn(j['fuelQty']),
         fuelCost: _dn(j['fuelCost']),
         remarks: j['remarks']?.toString(),
+        machineName: (j['machine'] is Map) ? j['machine']['name']?.toString() : null,
+        machineCode: (j['machine'] is Map) ? j['machine']['machineCode']?.toString() : null,
+        projectName: j['projectName']?.toString(),
+        location: j['location']?.toString(),
       );
 }
 
@@ -172,9 +201,25 @@ class MachineTransferLite {
   final String status; // PENDING | IN_TRANSIT | RECEIVED
   final DateTime? transferDate;
   final String? machineName;
+  final String? machineCode;
   final String? fromName;
   final String? toName;
-  const MachineTransferLite({required this.id, required this.transferCode, this.status = 'PENDING', this.transferDate, this.machineName, this.fromName, this.toName});
+  final double? transportCost;
+  final String? gatePassNo;
+  final String? vehicleUsed;
+  const MachineTransferLite({
+    required this.id,
+    required this.transferCode,
+    this.status = 'PENDING',
+    this.transferDate,
+    this.machineName,
+    this.machineCode,
+    this.fromName,
+    this.toName,
+    this.transportCost,
+    this.gatePassNo,
+    this.vehicleUsed,
+  });
 
   factory MachineTransferLite.fromJson(Map<String, dynamic> j) => MachineTransferLite(
         id: _i(j['id']),
@@ -182,8 +227,12 @@ class MachineTransferLite {
         status: (j['status'] ?? 'PENDING').toString(),
         transferDate: _dt(j['transferDate']),
         machineName: (j['machine'] is Map) ? j['machine']['name']?.toString() : null,
+        machineCode: (j['machine'] is Map) ? j['machine']['machineCode']?.toString() : null,
         fromName: j['fromName']?.toString(),
         toName: j['toName']?.toString(),
+        transportCost: _dn(j['transportCost']),
+        gatePassNo: j['gatePassNo']?.toString(),
+        vehicleUsed: j['vehicleUsed']?.toString(),
       );
 }
 

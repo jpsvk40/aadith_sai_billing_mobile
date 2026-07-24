@@ -110,6 +110,20 @@ import '../features/settings/screens/push_settings_screen.dart';
 import '../features/admin/screens/user_list_screen.dart';
 import '../features/admin/screens/user_form_screen.dart';
 import '../data/models/app_user_model.dart';
+// ─── New parity modules (2026-07) ───
+import '../features/vendors/screens/vendor_list_screen.dart';
+import '../features/advances/screens/ledger_advances_screen.dart';
+import '../features/finance/screens/stock_entries_list_screen.dart';
+import '../features/gst_bills/screens/gst_bills_screen.dart';
+import '../features/correspondence/screens/legal_cases_screen.dart';
+import '../features/correspondence/screens/legal_case_detail_screen.dart';
+import '../features/erp/screens/machinery_logbook_screen.dart';
+import '../features/erp/screens/machinery_transfers_screen.dart';
+import '../features/procurement/screens/procurement_hub_screen.dart';
+import '../features/procurement/screens/requisition_create_screen.dart';
+import '../features/procurement/screens/requisition_detail_screen.dart';
+import '../features/procurement/screens/rfq_detail_screen.dart';
+import '../features/procurement/screens/purchase_order_detail_screen.dart';
 import 'route_guards.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -203,6 +217,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/customers', builder: (c, s) => const CustomerListScreen()),
             GoRoute(path: '/customers/new', builder: (c, s) => const CustomerFormScreen()),
             GoRoute(path: '/customers/:id/edit', builder: (c, s) => CustomerFormScreen(editCustomer: s.extra as Customer?)),
+            // ─── Vendors master (vendor_purchases module) ───
+            GoRoute(path: '/vendors', builder: (c, s) => const VendorListScreen()),
             // ─── Product master (products module) + Stock-take (stocktake module) ───
             GoRoute(path: '/products', builder: (c, s) => const ProductListScreen()),
             GoRoute(path: '/products/new', builder: (c, s) => const ProductFormScreen()),
@@ -232,9 +248,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/finance/gst/einvoice', builder: (c, s) => const EinvoiceRegisterScreen()),
             GoRoute(path: '/finance/gst/eway', builder: (c, s) => const EwayRegisterScreen()),
             GoRoute(path: '/finance/gst/returns', builder: (c, s) => const GstReturnsReviewScreen()),
+            // ─── GST Bills (gst module) — split-invoice register + e-invoice/e-way export ───
+            GoRoute(path: '/gst-bills', builder: (c, s) => const GstBillsScreen()),
             GoRoute(path: '/finance/payables', builder: (c, s) => const PayablesScreen()),
             GoRoute(path: '/finance/payables/payments', builder: (c, s) => const VendorPaymentListScreen()),
             GoRoute(path: '/finance/payables/pay', builder: (c, s) => VendorPayScreen(initialVendorId: s.uri.queryParameters['vendorId'])),
+            // ─── Procurement (vendor_purchases module) — requisitions / RFQ / PO / payment requests ───
+            GoRoute(path: '/procurement', builder: (c, s) => const ProcurementHubScreen()),
+            GoRoute(path: '/procurement/requisitions/new', builder: (c, s) => const RequisitionCreateScreen()),
+            GoRoute(path: '/procurement/requisitions/:id', builder: (c, s) => RequisitionDetailScreen(id: int.parse(s.pathParameters['id']!))),
+            GoRoute(path: '/procurement/rfqs/:id', builder: (c, s) => RfqDetailScreen(id: int.parse(s.pathParameters['id']!))),
+            GoRoute(path: '/procurement/po/:id', builder: (c, s) => PurchaseOrderDetailScreen(id: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/finance/inventory', builder: (c, s) => const InventoryHubScreen()),
             GoRoute(path: '/finance/inventory/stock', builder: (c, s) => const InventoryReportScreen()),
             GoRoute(path: '/finance/inventory/items', builder: (c, s) => const InventoryItemsScreen()),
@@ -242,9 +266,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/finance/inventory/transfers', builder: (c, s) => const InventoryTransfersScreen()),
             GoRoute(path: '/finance/inventory/movements', builder: (c, s) => const InventoryMovementsScreen()),
             GoRoute(path: '/finance/inventory/entries', builder: (c, s) => const StockEntryScreen()),
+            GoRoute(path: '/finance/inventory/entries/history', builder: (c, s) => const StockEntriesListScreen()),
             GoRoute(path: '/finance/expenses', builder: (c, s) => const ExpensesScreen()),
             GoRoute(path: '/finance/expenses/new', builder: (c, s) => const ExpenseEntryScreen()),
             GoRoute(path: '/finance/advances', builder: (c, s) => const AdvanceFloatsScreen()),
+            GoRoute(path: '/finance/advances/ledger', builder: (c, s) => const LedgerAdvancesScreen()),
             GoRoute(path: '/finance/gl', builder: (c, s) => const GlHubScreen()),
             GoRoute(path: '/finance/gl/tb', builder: (c, s) => const GlStatementScreen(statement: GlStatement.trialBalance)),
             GoRoute(path: '/finance/gl/pnl', builder: (c, s) => const GlStatementScreen(statement: GlStatement.profitLoss)),
@@ -336,6 +362,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             // Machinery field persona (operator / site_admin).
             GoRoute(path: '/machinery/home', builder: (c, s) => const MachineryHomeScreen()),
             GoRoute(path: '/machinery/create', builder: (c, s) => const MachineFormScreen()),
+            // Static sub-routes BEFORE /machinery/:id so go_router doesn't capture them as an :id.
+            GoRoute(path: '/machinery/logbook', builder: (c, s) => const MachineryLogbookScreen()),
+            GoRoute(path: '/machinery/transfers', builder: (c, s) => const MachineryTransfersScreen()),
             GoRoute(path: '/machinery/:id/edit', builder: (c, s) => MachineFormScreen(editId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/machinery/:id', builder: (c, s) => MachineDetailScreen(machineId: int.parse(s.pathParameters['id']!))),
             GoRoute(path: '/machinery/:id/log', builder: (c, s) => MachineLogEntryScreen(machineId: int.parse(s.pathParameters['id']!))),
@@ -347,6 +376,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/correspondence',
               builder: (c, s) => LettersScreen(initialScope: s.uri.queryParameters['scope']),
+            ),
+            // Legal Cases — declared BEFORE /correspondence/:id so 'cases' isn't captured as an :id.
+            GoRoute(path: '/correspondence/cases', builder: (c, s) => const LegalCasesScreen()),
+            GoRoute(
+              path: '/correspondence/cases/:id',
+              builder: (c, s) => LegalCaseDetailScreen(caseId: int.parse(s.pathParameters['id']!)),
             ),
             GoRoute(
               path: '/correspondence/:id',

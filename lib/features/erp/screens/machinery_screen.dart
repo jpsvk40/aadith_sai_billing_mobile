@@ -76,7 +76,21 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
     final async = ref.watch(machineryListProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Machinery')),
+      appBar: AppBar(
+        title: const Text('Machinery'),
+        actions: [
+          IconButton(
+            tooltip: 'Logbook',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () => context.push('/machinery/logbook'),
+          ),
+          IconButton(
+            tooltip: 'Transfers',
+            icon: const Icon(Icons.swap_horiz),
+            onPressed: () => context.push('/machinery/transfers'),
+          ),
+        ],
+      ),
       floatingActionButton: ref.watch(authProvider).user?.isOperator == true
           ? null
           : FloatingActionButton.extended(

@@ -95,6 +95,12 @@ void main() {
     await checkFilterSheet(tester, '/projects', 'Projects');
     await checkFilterSheet(tester, '/machinery', 'Machinery');
     await checkFilterSheet(tester, '/service/tickets', 'Service Tickets');
+    // New parity modules the QA user (vendor_purchases/gst/inventory/machinery) can reach.
+    await checkFilterSheet(tester, '/vendors', 'Vendors');
+    await checkFilterSheet(tester, '/procurement', 'Procurement');
+    await checkFilterSheet(tester, '/gst-bills', 'GST Bills');
+    await checkFilterSheet(tester, '/finance/inventory/entries/history', 'Stock Entries history');
+    await checkFilterSheet(tester, '/machinery/logbook', 'Machinery Logbook');
     // NOTE: /finance/expenses is gated by the `finance_accounts` module, which the
     // mobileqa persona lacks — its FilterSortButtons wiring is verified by analyze +
     // build + inspection instead.

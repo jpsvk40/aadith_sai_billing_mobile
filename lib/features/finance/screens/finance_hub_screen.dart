@@ -22,9 +22,12 @@ class FinanceHubScreen extends ConsumerWidget {
       (Icons.percent_outlined, 'Rep Commission', 'Leaderboard & settlements', const Color(0xFF7C3AED), 'reports', '/commissions'),
       (Icons.receipt_long_outlined, 'GST', 'Liability & compliance', const Color(0xFF0891B2), 'gst', '/finance/gst'),
       (Icons.account_balance_outlined, 'Payables', 'Vendor dues & credit notes', const Color(0xFFEF4444), 'vendor_purchases', '/finance/payables'),
+      (Icons.local_shipping_outlined, 'Vendors', 'Suppliers master list', const Color(0xFF0F766E), 'vendor_purchases', '/vendors'),
+      (Icons.shopping_cart_outlined, 'Procurement', 'Requisitions · RFQ · PO · payments', const Color(0xFF0EA5E9), 'vendor_purchases', '/procurement'),
       (Icons.inventory_2_outlined, 'Inventory', 'Stock · items · transfers', const Color(0xFF7C3AED), 'inventory', '/finance/inventory'),
       (Icons.request_quote_outlined, 'Expenses', 'Office & petty cash', const Color(0xFFD97706), 'finance_accounts', '/finance/expenses'),
-      (Icons.account_balance_wallet_outlined, 'Advances', 'Staff advance floats', const Color(0xFF7C3AED), 'finance_accounts', '/finance/advances'),
+      (Icons.account_balance_wallet_outlined, 'Staff Advances', 'Staff advance floats', const Color(0xFF7C3AED), 'finance_accounts', '/finance/advances'),
+      (Icons.savings_outlined, 'Party Advances', 'Vendor & customer ledger', const Color(0xFF4F46E5), 'finance_accounts', '/finance/advances/ledger'),
       (Icons.menu_book_outlined, 'General Ledger', 'Ledger · TB · P&L · Day book', const Color(0xFF6366F1), 'finance_gl', '/finance/gl'),
       (Icons.groups_outlined, 'Payroll', 'Runs & advances', const Color(0xFF059669), 'payroll', '/finance/payroll'),
     ].where((t) => has(t.$5)).toList();

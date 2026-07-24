@@ -26,6 +26,7 @@ class InventoryHubScreen extends ConsumerWidget {
       (Icons.swap_horiz_outlined, 'Transfers', 'Between locations', const Color(0xFFD97706), () => context.push('/finance/inventory/transfers')),
       (Icons.receipt_long_outlined, 'Movements', 'Stock ledger', const Color(0xFF059669), () => context.push('/finance/inventory/movements')),
       (Icons.playlist_add_outlined, 'Stock Entry', 'Inward / outward / adjust', const Color(0xFF16A34A), () => context.push('/finance/inventory/entries')),
+      (Icons.history_outlined, 'Stock Entries', 'Posted entry history', const Color(0xFF15803D), () => context.push('/finance/inventory/entries/history')),
       (Icons.calculate_outlined, 'Valuation', 'Stock value (WAC/LPP)', const Color(0xFFEF4444),
           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReportViewScreen(config: FinanceReports.inventoryValuation)))),
     ];

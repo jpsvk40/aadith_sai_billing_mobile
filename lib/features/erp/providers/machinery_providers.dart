@@ -19,7 +19,17 @@ final machinerySummaryProvider = FutureProvider.autoDispose<MachineryMineSummary
   (ref) => ref.watch(machineryRepositoryProvider).getSummary(),
 );
 
-/// Transfers register — the field home surfaces PENDING/IN_TRANSIT ones to receive.
+/// Transfers register — the field home surfaces PENDING/IN_TRANSIT ones to receive;
+/// the full Transfers screen shows every transfer incl. RECEIVED history.
 final machineTransfersProvider = FutureProvider.autoDispose<List<MachineTransferLite>>(
   (ref) => ref.watch(machineryRepositoryProvider).getTransfers(),
+);
+
+/// Server-backed filters for the fleet Logbook. A record makes a clean family key
+/// (structural equality → one request per distinct machine/date-range combination).
+typedef LogbookQuery = ({int? machineId, String? from, String? to});
+
+/// Fleet-wide logbook rows (GET /machinery/logs) for the given [LogbookQuery].
+final machineryLogbookProvider = FutureProvider.autoDispose.family<List<MachineLog>, LogbookQuery>(
+  (ref, q) => ref.watch(machineryRepositoryProvider).getLogs(machineId: q.machineId, from: q.from, to: q.to),
 );
