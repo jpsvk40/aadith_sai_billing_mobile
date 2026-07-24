@@ -98,11 +98,19 @@ workflows:
           # if it's unset we fall back to the build number in pubspec.yaml (version: x.y.z+N).
           BUILD_NUMBER_ARG=""
           if [ -n "$APP_STORE_APPLE_ID" ]; then
-            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS 2>/dev/null || echo "")
             if [ -n "$LATEST" ]; then
               BUILD_NUMBER_ARG="--build-number=$((LATEST + 1))"
               echo "Latest TestFlight build = $LATEST -> building with $BUILD_NUMBER_ARG"
             fi
+          fi
+          # Fallback: if the TestFlight lookup came back empty (its failure is
+          # silenced above), use Codemagic's own monotonically-increasing build
+          # index, which is always higher than the last hand-set pubspec number —
+          # so uploads never collide with an already-used build number again.
+          if [ -z "$BUILD_NUMBER_ARG" ] && [ -n "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER_ARG="--build-number=$BUILD_NUMBER"
+            echo "TestFlight lookup empty -> using Codemagic BUILD_NUMBER=$BUILD_NUMBER"
           fi
           flutter build ios --release --no-codesign $BUILD_NUMBER_ARG
           echo "===== Podfile.lock PODS after flutter build ====="
