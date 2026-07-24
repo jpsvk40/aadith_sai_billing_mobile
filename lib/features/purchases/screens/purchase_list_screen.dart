@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/vendor_purchase_model.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../purchase_bill_scan.dart';
 import '../providers/purchase_list_provider.dart';
@@ -29,6 +33,9 @@ class PurchaseListScreen extends ConsumerStatefulWidget {
 
 class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
   final _searchCtrl = TextEditingController();
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -38,19 +45,75 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  // Search is applied server-side (to avoid the old first-page truncation), so
+  // debounce keystrokes instead of firing a request per character.
+  void _onSearchChanged(String v) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) ref.read(purchaseListProvider.notifier).setSearch(v);
+    });
+  }
+
   List<VendorPurchase> _filtered(PurchaseListState s) {
     final q = s.search.trim().toLowerCase();
-    return s.purchases.where((p) {
+    final vendorSel = _filters.select('vendor');
+    // status + search are also applied server-side; kept here for instant feedback.
+    var list = s.purchases.where((p) {
       if (s.statusFilter != 'All' && p.status != s.statusFilter) return false;
+      if (vendorSel != null && vendorSel.isNotEmpty && (p.vendorName ?? '') != vendorSel) return false;
       if (q.isEmpty) return true;
       return p.purchaseNumber.toLowerCase().contains(q) ||
           (p.vendorName ?? '').toLowerCase().contains(q) ||
           (p.invoiceNumber ?? '').toLowerCase().contains(q);
     }).toList();
+    if (_sort != null) list = applySort(list, _sort!, _valueOf);
+    return list;
+  }
+
+  Comparable? _valueOf(VendorPurchase p, String key) {
+    switch (key) {
+      case 'purchaseDate':
+        return p.purchaseDate?.millisecondsSinceEpoch;
+      case 'invoiceDate':
+        return p.invoiceDate?.millisecondsSinceEpoch;
+      case 'amount':
+        return p.totalAmount;
+      case 'vendor':
+        return (p.vendorName ?? '').toLowerCase();
+    }
+    return null;
+  }
+
+  Future<void> _openFilters() async {
+    final purchases = ref.read(purchaseListProvider).purchases;
+    final vendors = purchases
+        .map((p) => p.vendorName)
+        .whereType<String>()
+        .where((v) => v.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final result = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: true,
+      showDateRange: true,
+      financialYears: fyData.years,
+      selects: [SelectFilter(key: 'vendor', label: 'Vendor', options: vendors)],
+      title: 'Filter Purchases',
+    );
+    if (result == null) return;
+    setState(() => _filters = result);
+    await ref
+        .read(purchaseListProvider.notifier)
+        .setDateRange(result.dateFromParam, result.dateToParam, financialYearId: result.financialYearId);
   }
 
   Color _statusColor(String s) {
@@ -70,6 +133,7 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(financialYearsProvider); // kick off + cache FY list for the filter sheet
     final state = ref.watch(purchaseListProvider);
     final visible = _filtered(state);
 
@@ -138,7 +202,7 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
           const SizedBox(height: 16),
           TextField(
             controller: _searchCtrl,
-            onChanged: (v) => ref.read(purchaseListProvider.notifier).setSearch(v),
+            onChanged: _onSearchChanged,
             decoration: InputDecoration(
               hintText: 'Purchase #, invoice #, vendor...',
               prefixIcon: const Icon(Icons.search, size: 20),
@@ -150,11 +214,26 @@ class _PurchaseListScreenState extends ConsumerState<PurchaseListScreen> {
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
               suffixIcon: s.search.isNotEmpty
                   ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () {
+                      _searchDebounce?.cancel();
                       _searchCtrl.clear();
                       ref.read(purchaseListProvider.notifier).setSearch('');
                     })
                   : null,
             ),
+          ),
+          const SizedBox(height: 10),
+          FilterSortButtons(
+            padding: EdgeInsets.zero,
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            currentSort: _sort,
+            sortOptions: const [
+              SortSpec('purchaseDate', 'Purchase Date'),
+              SortSpec('invoiceDate', 'Invoice Date'),
+              SortSpec('amount', 'Amount'),
+              SortSpec('vendor', 'Vendor'),
+            ],
+            onSortChanged: (s) => setState(() => _sort = s),
           ),
           const SizedBox(height: 10),
           SizedBox(

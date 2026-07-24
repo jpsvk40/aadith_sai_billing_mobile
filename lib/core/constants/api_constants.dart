@@ -38,6 +38,9 @@ class ApiConstants {
   static const String dashboard = '/api/reports/dashboard';
   static const String dashboardEnhanced = '/api/reports/dashboard-enhanced';
 
+  // Reference data
+  static const String financialYears = '/api/financial-years';
+
   // Orders
   static const String orders = '/api/orders';
   static String orderDetail(String id) => '/api/orders/$id';

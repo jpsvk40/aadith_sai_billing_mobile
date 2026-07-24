@@ -6,10 +6,25 @@ class VendorPurchaseRepository {
   final ApiClient _client;
   VendorPurchaseRepository(this._client);
 
-  Future<List<VendorPurchase>> getPurchases({int page = 1, int limit = 20}) async {
+  Future<List<VendorPurchase>> getPurchases({
+    int page = 1,
+    int limit = 500,
+    String? status,
+    String? search,
+    String? dateFrom,
+    String? dateTo,
+    String? vendorId,
+    String? financialYearId,
+  }) async {
     final data = await _client.get(ApiConstants.vendorPurchases, queryParams: {
       'page': page,
       'limit': limit,
+      if (status != null && status.isNotEmpty && status != 'All') 'status': status,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+      if (vendorId != null && vendorId.isNotEmpty) 'vendorId': vendorId,
+      if (financialYearId != null && financialYearId.isNotEmpty) 'financialYearId': financialYearId,
     });
     final list = data is Map
         ? (data['purchases'] ?? data['data'] ?? data['items'] ?? const [])

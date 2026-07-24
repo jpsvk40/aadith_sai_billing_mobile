@@ -132,6 +132,7 @@ class ReportRegistry {
       endpoint: '/api/reports/transport-summary',
       icon: Icons.local_shipping_outlined,
       color: Color(0xFFD97706),
+      supportsPeriod: true,
       totalField: 'grossFreight',
       drill: 'transport',
       columns: [

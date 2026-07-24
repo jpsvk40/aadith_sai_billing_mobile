@@ -251,6 +251,28 @@ List<(String, String, int)> buildStatusOptions(Iterable<String> values, {String 
   ];
 }
 
+/// Build "All + every status in [statuses]" filter options with live counts from
+/// [values]. Unlike [buildStatusOptions] the stage list is FIXED, so stages with
+/// zero rows still show up (they never silently disappear). Counts come from the
+/// currently-loaded rows; a missing status simply renders as 0.
+List<(String, String, int)> buildFixedStatusOptions(
+  List<String> statuses,
+  Iterable<String> values, {
+  String allLabel = 'All',
+}) {
+  final counts = <String, int>{};
+  var total = 0;
+  for (final v in values) {
+    if (v.isEmpty) continue;
+    counts[v] = (counts[v] ?? 0) + 1;
+    total++;
+  }
+  return [
+    (allLabel, 'all', total),
+    for (final s in statuses) (_pretty(s), s, counts[s] ?? 0),
+  ];
+}
+
 String _pretty(String k) => k.isEmpty ? k : k.split('_').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase()).join(' ');
 
 class ErpEmpty extends StatelessWidget {

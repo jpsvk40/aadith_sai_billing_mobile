@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/credit_note_model.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../providers/credit_note_providers.dart';
 
 /// Customer Credit Notes list — parity with the web page: subtitle, status filter
@@ -15,18 +16,77 @@ class CustomerCreditNoteListScreen extends ConsumerStatefulWidget {
 }
 
 class _CustomerCreditNoteListScreenState extends ConsumerState<CustomerCreditNoteListScreen> {
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(customerCreditNoteListProvider.notifier).load());
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   String _shortDate(String? d) => (d == null || d.length < 10) ? (d ?? '—') : d.substring(0, 10);
+
+  /// Client-side search (CN # / reason) + customer select filter + sort over the loaded list.
+  List<CustomerCreditNote> _visible(List<CustomerCreditNote> all) {
+    final q = _search.trim().toLowerCase();
+    final cust = _filters.select('customer');
+    var rows = all.where((n) {
+      if (q.isNotEmpty) {
+        final hay = '${n.creditNoteNumber} ${n.reason ?? ''}'.toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
+      if (cust != null && cust.isNotEmpty && (n.customerName ?? '') != cust) return false;
+      return true;
+    }).toList();
+    final sort = _sort;
+    if (sort != null) {
+      rows = applySort(rows, sort, (n, key) {
+        switch (key) {
+          case 'date':
+            return n.creditNoteDate;
+          case 'amount':
+            return n.totalAmount;
+        }
+        return null;
+      });
+    }
+    return rows;
+  }
+
+  Future<void> _openFilters(List<String> customerOptions) async {
+    final result = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: false,
+      showDateRange: false,
+      selects: [
+        SelectFilter(key: 'customer', label: 'Customer', options: customerOptions),
+      ],
+    );
+    if (result != null) setState(() => _filters = result);
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(customerCreditNoteListProvider);
     final filters = ['All', ...CustomerCreditNoteStatus.all];
+    final customerOptions = state.notes
+        .map((n) => n.customerName)
+        .where((c) => c != null && c.isNotEmpty)
+        .map((c) => c!)
+        .toSet()
+        .toList()
+      ..sort();
+    final visible = _visible(state.notes);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Credit Notes')),
@@ -49,6 +109,14 @@ class _CustomerCreditNoteListScreenState extends ConsumerState<CustomerCreditNot
                 style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
               ),
             ),
+          ),
+          _searchField(),
+          FilterSortButtons(
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: () => _openFilters(customerOptions),
+            sortOptions: const [SortSpec('date', 'Date'), SortSpec('amount', 'Amount')],
+            currentSort: _sort,
+            onSortChanged: (s) => setState(() => _sort = s),
           ),
           SizedBox(
             height: 46,
@@ -94,18 +162,56 @@ class _CustomerCreditNoteListScreenState extends ConsumerState<CustomerCreditNot
                         ? _empty()
                         : RefreshIndicator(
                             onRefresh: () => ref.read(customerCreditNoteListProvider.notifier).load(),
-                            child: ListView.separated(
-                              padding: const EdgeInsets.all(12),
-                              itemCount: state.notes.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
-                              itemBuilder: (ctx, i) => _row(state.notes[i]),
-                            ),
+                            child: visible.isEmpty
+                                ? _noMatch()
+                                : ListView.separated(
+                                    padding: const EdgeInsets.all(12),
+                                    itemCount: visible.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (ctx, i) => _row(visible[i]),
+                                  ),
                           ),
           ),
         ],
       ),
     );
   }
+
+  Widget _searchField() => Padding(
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _search = v),
+          decoration: InputDecoration(
+            hintText: 'Search credit note #, reason...',
+            prefixIcon: const Icon(Icons.search, size: 20),
+            isDense: true,
+            filled: true,
+            fillColor: AppColors.surface,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+            suffixIcon: _search.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _search = '');
+                    },
+                  )
+                : null,
+          ),
+        ),
+      );
+
+  Widget _noMatch() => ListView(
+        children: const [
+          SizedBox(height: 120),
+          Icon(Icons.search_off, size: 46, color: AppColors.textMuted),
+          SizedBox(height: 12),
+          Center(child: Text('No credit notes match your filters.', style: TextStyle(color: AppColors.textMuted))),
+        ],
+      );
 
   Widget _row(CustomerCreditNote n) {
     final c = CustomerCreditNoteStatus.color(n.status);

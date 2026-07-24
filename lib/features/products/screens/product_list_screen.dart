@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/models/product_model.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../providers/product_admin_providers.dart';
 
 /// Product master list — parity with the web Products page: search + rows showing
@@ -18,6 +19,8 @@ class ProductListScreen extends ConsumerStatefulWidget {
 class _ProductListScreenState extends ConsumerState<ProductListScreen> {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
 
   @override
   void initState() {
@@ -39,9 +42,60 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
     });
   }
 
+  /// Distinct, non-empty, sorted values for a select filter's options.
+  List<String> _distinct(Iterable<String?> values) {
+    return values
+        .where((v) => v != null && v.trim().isNotEmpty)
+        .map((v) => v!.trim())
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  /// Applies client-side category filter + sort over the server-searched list.
+  List<ProductDetail> _visible(ProductListState s) {
+    var list = s.products;
+
+    final category = _filters.select('category');
+    if (category != null) {
+      list = list.where((p) => (p.category ?? '') == category).toList();
+    }
+
+    if (_sort != null) {
+      list = applySort<ProductDetail>(list, _sort!, (p, key) {
+        switch (key) {
+          case 'name':
+            return p.productName.toLowerCase();
+          case 'category':
+            return p.category?.toLowerCase();
+          case 'price':
+            return p.sellingPrice;
+        }
+        return null;
+      });
+    }
+    return list;
+  }
+
+  Future<void> _openFilters() async {
+    final s = ref.read(productListProvider);
+    final categories = _distinct(s.products.map((p) => p.category));
+    final res = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: false,
+      showDateRange: false,
+      selects: [
+        if (categories.isNotEmpty) SelectFilter(key: 'category', label: 'Category', options: categories),
+      ],
+    );
+    if (res != null) setState(() => _filters = res);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(productListProvider);
+    final visible = _visible(state);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Products')),
@@ -71,6 +125,18 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
               ),
             ),
           ),
+          FilterSortButtons(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            sortOptions: const [
+              SortSpec('name', 'Name'),
+              SortSpec('category', 'Category'),
+              SortSpec('price', 'Price'),
+            ],
+            currentSort: _sort,
+            onSortChanged: (s) => setState(() => _sort = s),
+          ),
           const Divider(height: 1),
           Expanded(
             child: state.isLoading
@@ -81,12 +147,14 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         ? _empty()
                         : RefreshIndicator(
                             onRefresh: () => ref.read(productListProvider.notifier).load(),
-                            child: ListView.separated(
-                              padding: const EdgeInsets.all(12),
-                              itemCount: state.products.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
-                              itemBuilder: (ctx, i) => _row(state.products[i]),
-                            ),
+                            child: visible.isEmpty
+                                ? _empty()
+                                : ListView.separated(
+                                    padding: const EdgeInsets.all(12),
+                                    itemCount: visible.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (ctx, i) => _row(visible[i]),
+                                  ),
                           ),
           ),
         ],

@@ -135,6 +135,36 @@ class _ApprovalsScreenState extends ConsumerState<ApprovalsScreen> {
               }).toList(),
             ),
           ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: const <(String?, String)>[
+                (null, 'All'),
+                ('PENDING', 'Pending'),
+                ('HOLD', 'On Hold'),
+                ('APPROVED', 'Approved'),
+                ('REJECTED', 'Rejected'),
+              ].map((f) {
+                final sel = s.statusFilter == f.$1;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(f.$2),
+                    selected: sel,
+                    onSelected: (_) => ref.read(approvalsProvider.notifier).setStatus(f.$1),
+                    labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? AppColors.primaryDark : AppColors.textSecondary),
+                    selectedColor: AppColors.primaryLight,
+                    backgroundColor: AppColors.surface,
+                    side: BorderSide(color: sel ? AppColors.primary : AppColors.border),
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
           const SizedBox(height: 6),
           if (s.items.isEmpty && !s.isLoading)
             Padding(

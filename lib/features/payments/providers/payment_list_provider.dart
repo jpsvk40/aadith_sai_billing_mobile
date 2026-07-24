@@ -11,6 +11,9 @@ class PaymentListState {
   final String approvalFilter; // All | Pending | Approved | Rejected (client-side)
   final String search;
   final String period; // '' (all) | thisMonth | lastMonth | thisYear | lastYear | last30days | last90days
+  final String? dateFrom; // yyyy-MM-dd (server filter, from the filter sheet)
+  final String? dateTo; // yyyy-MM-dd (server filter, from the filter sheet)
+  final String? financialYearId; // server filter, from the filter sheet
   final String? actioningId;
 
   const PaymentListState({
@@ -20,6 +23,9 @@ class PaymentListState {
     this.approvalFilter = 'All',
     this.search = '',
     this.period = '',
+    this.dateFrom,
+    this.dateTo,
+    this.financialYearId,
     this.actioningId,
   });
 
@@ -30,6 +36,10 @@ class PaymentListState {
     String? approvalFilter,
     String? search,
     String? period,
+    String? dateFrom,
+    String? dateTo,
+    bool hasDates = false, // when true, dateFrom/dateTo/financialYearId are applied even if null
+    String? financialYearId,
     String? actioningId,
     bool clearActioning = false,
   }) {
@@ -40,6 +50,9 @@ class PaymentListState {
       approvalFilter: approvalFilter ?? this.approvalFilter,
       search: search ?? this.search,
       period: period ?? this.period,
+      dateFrom: hasDates ? dateFrom : this.dateFrom,
+      dateTo: hasDates ? dateTo : this.dateTo,
+      financialYearId: hasDates ? financialYearId : (financialYearId ?? this.financialYearId),
       actioningId: clearActioning ? null : (actioningId ?? this.actioningId),
     );
   }
@@ -52,7 +65,13 @@ class PaymentListNotifier extends StateNotifier<PaymentListState> {
   Future<void> load() async {
     state = state.copyWith(isLoading: true);
     try {
-      final payments = await _repo.getPayments(period: state.period.isEmpty ? null : state.period);
+      // approval stays client-side (chips); date window is server-side.
+      final payments = await _repo.getPayments(
+        period: state.period.isEmpty ? null : state.period,
+        dateFrom: state.dateFrom,
+        dateTo: state.dateTo,
+        financialYearId: state.financialYearId,
+      );
       state = state.copyWith(payments: payments, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -63,6 +82,11 @@ class PaymentListNotifier extends StateNotifier<PaymentListState> {
   void setSearch(String s) => state = state.copyWith(search: s);
   Future<void> setPeriod(String p) async {
     state = state.copyWith(period: p);
+    await load();
+  }
+
+  Future<void> setDateRange(String? from, String? to, {String? financialYearId}) async {
+    state = state.copyWith(dateFrom: from, dateTo: to, financialYearId: financialYearId, hasDates: true);
     await load();
   }
 

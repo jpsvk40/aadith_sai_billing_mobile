@@ -13,6 +13,7 @@ class ApprovalsState {
   final int hold;
   final int mine;
   final String scope; // 'inbox' | 'all' | 'mine'
+  final String? statusFilter; // null = All | PENDING | HOLD | APPROVED | REJECTED
   final bool isLoading;
   final String? error;
   final String? actioningId;
@@ -24,6 +25,7 @@ class ApprovalsState {
     this.hold = 0,
     this.mine = 0,
     this.scope = 'inbox',
+    this.statusFilter,
     this.isLoading = false,
     this.error,
     this.actioningId,
@@ -36,6 +38,8 @@ class ApprovalsState {
     int? hold,
     int? mine,
     String? scope,
+    String? statusFilter,
+    bool clearStatusFilter = false,
     bool? isLoading,
     String? error,
     String? actioningId,
@@ -48,6 +52,7 @@ class ApprovalsState {
         hold: hold ?? this.hold,
         mine: mine ?? this.mine,
         scope: scope ?? this.scope,
+        statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
         isLoading: isLoading ?? this.isLoading,
         error: error,
         actioningId: clearActioning ? null : (actioningId ?? this.actioningId),
@@ -64,7 +69,7 @@ class ApprovalsNotifier extends StateNotifier<ApprovalsState> {
     try {
       final engineScope = state.scope == 'all' ? null : state.scope;
       final results = await Future.wait([
-        _repo.getRequests(scope: engineScope),
+        _repo.getRequests(scope: engineScope, status: state.statusFilter),
         _repo.getSummary(),
         _payRepo.getPayments(approvalStatus: 'Pending'),
       ]);
@@ -73,7 +78,9 @@ class ApprovalsNotifier extends StateNotifier<ApprovalsState> {
       final pendingPayments = (results[2] as List<Payment>).where((p) => p.approvalStatus == 'Pending').toList();
 
       // Payments are the admin's action queue for every scope except "my requests".
-      final includePayments = state.scope != 'mine';
+      // The pending-payment queue is Pending-only, so hide it when filtering to a non-pending status.
+      final statusAllowsPayments = state.statusFilter == null || state.statusFilter == 'PENDING';
+      final includePayments = state.scope != 'mine' && statusAllowsPayments;
       final items = <ApprovalItem>[
         if (includePayments) ...pendingPayments.map(ApprovalItem.fromPayment),
         ...requests.map(ApprovalItem.fromRequest),
@@ -95,6 +102,14 @@ class ApprovalsNotifier extends StateNotifier<ApprovalsState> {
   void setScope(String scope) {
     if (scope == state.scope) return;
     state = state.copyWith(scope: scope);
+    load();
+  }
+
+  /// Filter by request status. Pass null (or 'All') to clear and show open items.
+  void setStatus(String? status) {
+    final next = (status == null || status.isEmpty || status == 'All') ? null : status;
+    if (next == state.statusFilter) return;
+    state = next == null ? state.copyWith(clearStatusFilter: true) : state.copyWith(statusFilter: next);
     load();
   }
 

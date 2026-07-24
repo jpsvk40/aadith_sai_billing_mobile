@@ -101,9 +101,9 @@ final serviceItemsProvider = FutureProvider.family<List<ServiceItem>, String>((r
   return ref.watch(serviceRepositoryProvider).getItems(search: search.isEmpty ? null : search);
 });
 
-// ─── AMC contracts (admin) ───
-final serviceContractsProvider = FutureProvider<List<ServiceContract>>((ref) async {
-  return ref.watch(serviceRepositoryProvider).getContracts();
+// ─── AMC contracts (admin) — family keyed by status ('All' → no filter) ───
+final serviceContractsProvider = FutureProvider.family<List<ServiceContract>, String>((ref, status) async {
+  return ref.watch(serviceRepositoryProvider).getContracts(status: status == 'All' || status.isEmpty ? null : status);
 });
 
 // ─── Reports bundle (admin): revenue + technician productivity + parts usage ───

@@ -5,7 +5,9 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../data/network/api_client.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -21,6 +23,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   bool _loading = true;
   String? _error;
 
+  // Shared filter + sort state. Date/period are scoped on the server; category +
+  // payment-mode selects and the sort run client-side over the loaded list.
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +38,14 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final client = ApiClient.getInstance(onUnauthorized: () => ref.read(authProvider.notifier).logout());
-      final data = await client.get(ApiConstants.officeExpenses);
+      final qp = <String, dynamic>{};
+      final from = _filters.dateFromParam;
+      final to = _filters.dateToParam;
+      if (from != null) qp['dateFrom'] = from;
+      if (to != null) qp['dateTo'] = to;
+      if (_filters.period != null) qp['period'] = _filters.period;
+      if (_filters.financialYearId != null) qp['financialYearId'] = _filters.financialYearId;
+      final data = await client.get(ApiConstants.officeExpenses, queryParams: qp.isEmpty ? null : qp);
       dynamic list = data;
       if (data is Map) list = data['data'] ?? data['expenses'] ?? data['rows'] ?? data.values.firstWhere((v) => v is List, orElse: () => const []);
       if (!mounted) return;
@@ -51,9 +65,67 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     return null;
   }
 
+  /// Distinct categories present in the loaded rows (for the Category select).
+  List<String> get _categoryOptions {
+    final set = <String>{};
+    for (final r in _rows) {
+      final c = _first(r, ['category', 'categoryName']);
+      if (c != null && c.trim().isNotEmpty) set.add(c.trim());
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  /// Rows after client-side category/mode filtering + sort (server already
+  /// scoped by date/period). Used for the list and the summary card.
+  List<Map<String, dynamic>> get _visible {
+    var list = _rows;
+    final cat = _filters.select('category');
+    if (cat != null && cat.isNotEmpty) {
+      list = list.where((r) => (_first(r, ['category', 'categoryName']) ?? '') == cat).toList();
+    }
+    final mode = _filters.select('mode');
+    if (mode != null && mode.isNotEmpty) {
+      list = list.where((r) => (_first(r, ['paymentMode', 'mode']) ?? '').toLowerCase() == mode.toLowerCase()).toList();
+    }
+    final sort = _sort;
+    if (sort != null) {
+      list = applySort(list, sort, (r, key) {
+        if (key == 'amount') return _num(r['amount'] ?? r['totalAmount']);
+        return _first(r, ['expenseDate', 'date']) ?? ''; // ISO date strings sort lexicographically
+      });
+    }
+    return list;
+  }
+
+  Future<void> _openFilters() async {
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final result = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: true,
+      showDateRange: true,
+      financialYears: fyData.years,
+      selects: [
+        SelectFilter(key: 'category', label: 'Category', options: _categoryOptions),
+        const SelectFilter(key: 'mode', label: 'Payment Mode', options: ['Cash', 'UPI']),
+      ],
+    );
+    if (result == null) return;
+    // Reload from server only when a server-side scope (date window or FY) changed.
+    final serverChanged = result.dateFromParam != _filters.dateFromParam ||
+        result.dateToParam != _filters.dateToParam ||
+        result.financialYearId != _filters.financialYearId;
+    setState(() => _filters = result);
+    if (serverChanged) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final total = _rows.fold<double>(0, (a, r) => a + _num(r['amount'] ?? r['totalAmount']));
+    ref.watch(financialYearsProvider); // kick off + cache FY list for the filter sheet
+    final visible = _visible;
+    final total = visible.fold<double>(0, (a, r) => a + _num(r['amount'] ?? r['totalAmount']));
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Expenses')),
@@ -69,13 +141,24 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           ? const LoadingIndicator()
           : _error != null && _rows.isEmpty
               ? ErrorStateWidget(message: _error!, onRetry: _load)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 90),
-                    itemCount: _rows.length + 1,
-                    itemBuilder: (ctx, i) {
-                      if (i == 0) {
+              : Column(
+                  children: [
+                    FilterSortButtons(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                      activeFilterCount: _filters.activeCount,
+                      onFilterTap: _openFilters,
+                      currentSort: _sort,
+                      sortOptions: const [SortSpec('date', 'Date'), SortSpec('amount', 'Amount')],
+                      onSortChanged: (s) => setState(() => _sort = s),
+                    ),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(0, 0, 0, 90),
+                          itemCount: visible.length + 1,
+                          itemBuilder: (ctx, i) {
+                            if (i == 0) {
                         return Container(
                           margin: const EdgeInsets.all(14),
                           padding: const EdgeInsets.all(16),
@@ -91,11 +174,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                               const SizedBox(height: 3),
                               Text(CurrencyUtils.format(total), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Colors.white)),
                             ])),
-                            Text('${_rows.length} rows', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85))),
+                            Text('${visible.length} rows', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85))),
                           ]),
                         );
                       }
-                      final r = _rows[i - 1];
+                      final r = visible[i - 1];
                       final label = _first(r, ['category', 'categoryName', 'description', 'notes', 'name']) ?? 'Expense';
                       final rawDate = _first(r, ['expenseDate', 'date']);
                       final date = rawDate != null && rawDate.length >= 10 ? rawDate.substring(0, 10) : rawDate;
@@ -117,8 +200,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                           Text(CurrencyUtils.format(_num(r['amount'] ?? r['totalAmount'])), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         ]),
                       );
-                    },
-                  ),
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
     );
   }

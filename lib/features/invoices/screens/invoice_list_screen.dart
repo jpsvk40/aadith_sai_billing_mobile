@@ -5,7 +5,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/invoice_model.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../providers/invoice_list_provider.dart';
 
@@ -25,11 +27,21 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   final _searchCtrl = TextEditingController();
   final _statuses = ['All', 'Unpaid', 'Partial', 'Paid', 'Overdue'];
 
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+
+  static const _sortOptions = <SortSpec>[
+    SortSpec('date', 'Date'),
+    SortSpec('amount', 'Amount'),
+    SortSpec('outstanding', 'Outstanding'),
+    SortSpec('customer', 'Customer'),
+  ];
+
   @override
   void initState() {
     super.initState();
     _selectedStatus = widget.initialStatus;
-    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(invoiceListProvider.notifier).load(status: _selectedStatus));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
   }
 
   @override
@@ -38,11 +50,68 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     super.dispose();
   }
 
-  List<Invoice> _filtered(List<Invoice> all) {
+  Future<void> _reload() => ref.read(invoiceListProvider.notifier).load(
+        status: _selectedStatus,
+        dateFrom: _filters.dateFromParam,
+        dateTo: _filters.dateToParam,
+        financialYearId: _filters.financialYearId,
+      );
+
+  Future<void> _openFilters() async {
+    final loaded = ref.read(invoiceListProvider).invoices;
+    final createdByOptions = loaded
+        .map((i) => i.createdByName)
+        .whereType<String>()
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final res = await showListFilterSheet(
+      context,
+      initial: _filters,
+      financialYears: fyData.years,
+      selects: [
+        SelectFilter(key: 'createdBy', label: 'Created By', options: createdByOptions),
+      ],
+    );
+    if (res != null) {
+      setState(() => _filters = res);
+      _reload();
+    }
+  }
+
+  Comparable? _invoiceSortValue(Invoice i, String key) {
+    switch (key) {
+      case 'date':
+        return i.invoiceDate;
+      case 'amount':
+        return i.totalAmount;
+      case 'outstanding':
+        return i.outstandingAmount;
+      case 'customer':
+        return (i.customerName ?? '').toLowerCase();
+    }
+    return null;
+  }
+
+  List<Invoice> _visible(List<Invoice> all) {
+    var list = all;
+    final createdBy = _filters.select('createdBy');
+    if (createdBy != null && createdBy.isNotEmpty) {
+      list = list.where((i) => (i.createdByName ?? '') == createdBy).toList();
+    }
     final q = _search.trim().toLowerCase();
-    if (q.isEmpty) return all;
-    return all.where((i) =>
-        i.invoiceNumber.toLowerCase().contains(q) || (i.customerName ?? '').toLowerCase().contains(q)).toList();
+    if (q.isNotEmpty) {
+      list = list
+          .where((i) => i.invoiceNumber.toLowerCase().contains(q) || (i.customerName ?? '').toLowerCase().contains(q))
+          .toList();
+    }
+    if (_sort != null) {
+      list = applySort(list, _sort!, _invoiceSortValue);
+    }
+    return list;
   }
 
   Color _statusColor(Invoice i) {
@@ -59,8 +128,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(financialYearsProvider); // kick off + cache FY list for the filter sheet
     final state = ref.watch(invoiceListProvider);
-    final visible = _filtered(state.invoices);
+    final visible = _visible(state.invoices);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -68,9 +138,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       body: state.isLoading && state.invoices.isEmpty
           ? const LoadingIndicator()
           : state.error != null && state.invoices.isEmpty
-              ? ErrorStateWidget(message: state.error!, onRetry: () => ref.read(invoiceListProvider.notifier).load(status: _selectedStatus))
+              ? ErrorStateWidget(message: state.error!, onRetry: _reload)
               : RefreshIndicator(
-                  onRefresh: () => ref.read(invoiceListProvider.notifier).load(status: _selectedStatus),
+                  onRefresh: _reload,
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 24),
                     itemCount: visible.length + 1,
@@ -128,6 +198,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                   : null,
             ),
           ),
+          FilterSortButtons(
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            sortOptions: _sortOptions,
+            currentSort: _sort,
+            onSortChanged: (s) => setState(() => _sort = s),
+            padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+          ),
           const SizedBox(height: 10),
           SizedBox(
             height: 36,
@@ -151,7 +229,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                     selected: sel,
                     onSelected: (_) {
                       setState(() => _selectedStatus = f == 'All' ? null : f);
-                      ref.read(invoiceListProvider.notifier).load(status: _selectedStatus);
+                      _reload();
                     },
                     labelStyle: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: sel ? c : AppColors.textSecondary),
                     selectedColor: c.withValues(alpha: 0.14),

@@ -10,6 +10,9 @@ class OrderListState {
   final String? error;
   final String? statusFilter;
   final String? search;
+  final String? dateFrom;
+  final String? dateTo;
+  final String? financialYearId;
 
   const OrderListState({
     this.orders = const [],
@@ -17,15 +20,21 @@ class OrderListState {
     this.error,
     this.statusFilter,
     this.search,
+    this.dateFrom,
+    this.dateTo,
+    this.financialYearId,
   });
 
-  OrderListState copyWith({List<Order>? orders, bool? isLoading, String? error, String? statusFilter, String? search}) {
+  OrderListState copyWith({List<Order>? orders, bool? isLoading, String? error, String? statusFilter, String? search, String? dateFrom, String? dateTo, String? financialYearId}) {
     return OrderListState(
       orders: orders ?? this.orders,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       statusFilter: statusFilter ?? this.statusFilter,
       search: search ?? this.search,
+      dateFrom: dateFrom ?? this.dateFrom,
+      dateTo: dateTo ?? this.dateTo,
+      financialYearId: financialYearId ?? this.financialYearId,
     );
   }
 }
@@ -34,11 +43,11 @@ class OrderListNotifier extends StateNotifier<OrderListState> {
   final OrderRepository _repo;
   OrderListNotifier(this._repo) : super(const OrderListState());
 
-  Future<void> load({String? status, String? search}) async {
-    state = state.copyWith(isLoading: true, error: null, statusFilter: status, search: search);
+  Future<void> load({String? status, String? search, String? dateFrom, String? dateTo, String? financialYearId}) async {
+    state = state.copyWith(isLoading: true, error: null, statusFilter: status, search: search, dateFrom: dateFrom, dateTo: dateTo, financialYearId: financialYearId);
     try {
-      final orders = await _repo.getOrders(status: status, search: search);
-      state = OrderListState(orders: orders, statusFilter: status, search: search);
+      final orders = await _repo.getOrders(status: status, search: search, dateFrom: dateFrom, dateTo: dateTo, financialYearId: financialYearId);
+      state = OrderListState(orders: orders, statusFilter: status, search: search, dateFrom: dateFrom, dateTo: dateTo, financialYearId: financialYearId);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }

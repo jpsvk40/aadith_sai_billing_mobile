@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../data/models/order_model.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/empty_state_widget.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../../widgets/common/status_badge.dart';
 import '../providers/order_list_provider.dart';
@@ -23,6 +26,15 @@ class OrderListScreen extends ConsumerStatefulWidget {
 class _OrderListScreenState extends ConsumerState<OrderListScreen> {
   final _searchController = TextEditingController();
   String? _selectedStatus;
+
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+
+  static const _sortOptions = <SortSpec>[
+    SortSpec('date', 'Date'),
+    SortSpec('amount', 'Amount'),
+    SortSpec('customer', 'Customer'),
+  ];
 
   final _statuses = ['All', 'New', 'In Production', 'Production Completed', 'Packed', 'Dispatched', 'Delivered', 'Cancelled', 'Void'];
 
@@ -42,14 +54,74 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
     ref.read(orderListProvider.notifier).load(
           status: _selectedStatus == 'All' ? null : _selectedStatus,
           search: _searchController.text.trim().isEmpty ? null : _searchController.text.trim(),
+          dateFrom: _filters.dateFromParam,
+          dateTo: _filters.dateToParam,
+          financialYearId: _filters.financialYearId,
         );
   }
 
-  Widget _summaryCards(OrderListState s) {
-    final total = s.orders.length;
-    final inProd = s.orders.where((o) => o.status == 'In Production').length;
-    final delivered = s.orders.where((o) => o.status == 'Delivered').length;
-    final value = s.orders.fold<double>(0, (a, o) => a + (o.totalAmount ?? 0));
+  Future<void> _openFilters() async {
+    final loaded = ref.read(orderListProvider).orders;
+    final createdByOptions = loaded
+        .map((o) => o.createdByName)
+        .whereType<String>()
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final res = await showListFilterSheet(
+      context,
+      initial: _filters,
+      financialYears: fyData.years,
+      selects: [
+        SelectFilter(key: 'createdBy', label: 'Created By', options: createdByOptions),
+        const SelectFilter(key: 'orderType', label: 'Order Type', options: ['Short-Closed', 'Normal']),
+      ],
+    );
+    if (res != null) {
+      setState(() => _filters = res);
+      _applyFilter();
+    }
+  }
+
+  bool _isShortClosed(Order o) =>
+      o.items.any((i) => i.confirmedQuantity != null && i.confirmedQuantity! < i.quantity);
+
+  Comparable? _orderSortValue(Order o, String key) {
+    switch (key) {
+      case 'date':
+        return o.createdAt;
+      case 'amount':
+        return o.totalAmount;
+      case 'customer':
+        return (o.customerName ?? '').toLowerCase();
+    }
+    return null;
+  }
+
+  List<Order> _visible(List<Order> orders) {
+    var list = orders;
+    final createdBy = _filters.select('createdBy');
+    if (createdBy != null && createdBy.isNotEmpty) {
+      list = list.where((o) => (o.createdByName ?? '') == createdBy).toList();
+    }
+    final orderType = _filters.select('orderType');
+    if (orderType != null && orderType.isNotEmpty) {
+      list = list.where((o) => orderType == 'Short-Closed' ? _isShortClosed(o) : !_isShortClosed(o)).toList();
+    }
+    if (_sort != null) {
+      list = applySort(list, _sort!, _orderSortValue);
+    }
+    return list;
+  }
+
+  Widget _summaryCards(List<Order> orders) {
+    final total = orders.length;
+    final inProd = orders.where((o) => o.status == 'In Production').length;
+    final delivered = orders.where((o) => o.status == 'Delivered').length;
+    final value = orders.fold<double>(0, (a, o) => a + (o.totalAmount ?? 0));
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
       child: GridView.count(
@@ -106,13 +178,15 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(financialYearsProvider); // kick off + cache FY list for the filter sheet
     final state = ref.watch(orderListProvider);
+    final visible = _visible(state.orders);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Orders')),
       body: Column(
         children: [
-          _summaryCards(state),
+          _summaryCards(visible),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
@@ -133,6 +207,13 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
               ),
               onSubmitted: (_) => _applyFilter(),
             ),
+          ),
+          FilterSortButtons(
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            sortOptions: _sortOptions,
+            currentSort: _sort,
+            onSortChanged: (s) => setState(() => _sort = s),
           ),
           SizedBox(
             height: 44,
@@ -163,14 +244,14 @@ class _OrderListScreenState extends ConsumerState<OrderListScreen> {
                 ? const LoadingIndicator()
                 : state.error != null && state.orders.isEmpty
                     ? ErrorStateWidget(message: state.error!, onRetry: _applyFilter)
-                    : state.orders.isEmpty
+                    : visible.isEmpty
                         ? const EmptyStateWidget(message: 'No orders found', icon: Icons.receipt_long_outlined)
                         : RefreshIndicator(
                             onRefresh: () async => _applyFilter(),
                             child: ListView.builder(
                               padding: const EdgeInsets.only(bottom: 16),
-                              itemCount: state.orders.length,
-                              itemBuilder: (ctx, i) => _OrderTile(order: state.orders[i]),
+                              itemCount: visible.length,
+                              itemBuilder: (ctx, i) => _OrderTile(order: visible[i]),
                             ),
                           ),
           ),

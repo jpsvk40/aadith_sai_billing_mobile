@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/erp_list_models.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/erp_providers.dart';
@@ -21,8 +22,54 @@ class MachineryScreen extends ConsumerStatefulWidget {
 }
 
 class _MachineryScreenState extends ConsumerState<MachineryScreen> {
+  // Fixed enums — every status/category always shows even with zero rows.
+  static const _statuses = ['ACTIVE', 'UNDER_MAINTENANCE', 'IDLE', 'HIRED_OUT', 'SCRAPPED'];
+  static const _categories = [
+    'FABRICATION', 'WELDING', 'CUTTING', 'LIFTING', 'EARTH_MOVING', 'CONCRETE',
+    'POWER', 'VEHICLE', 'TESTING', 'TOOLING', 'OTHER',
+  ];
+
   String _filter = 'all';
   String _q = '';
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
+
+  List<Machine> _visible(List<Machine> rows) {
+    var list = rows.where((m) {
+      if (_filter != 'all' && m.status != _filter) return false;
+      final cat = _filters.select('category');
+      if (cat != null && m.category != cat) return false;
+      if (_q.isEmpty) return true;
+      final s = _q.toLowerCase();
+      return m.name.toLowerCase().contains(s) || m.machineCode.toLowerCase().contains(s) || m.category.toLowerCase().contains(s) || (m.make ?? '').toLowerCase().contains(s);
+    }).toList();
+    if (_sort != null) {
+      list = applySort<Machine>(list, _sort!, (m, key) {
+        switch (key) {
+          case 'name':
+            return m.name.toLowerCase();
+          case 'code':
+            return m.machineCode.toLowerCase();
+        }
+        return null;
+      });
+    }
+    return list;
+  }
+
+  Future<void> _openFilters() async {
+    final res = await showListFilterSheet(
+      context,
+      initial: _filters,
+      title: 'Filter Machinery',
+      showPeriods: false,
+      showDateRange: false,
+      selects: const [
+        SelectFilter(key: 'category', label: 'Category', options: _categories),
+      ],
+    );
+    if (res != null) setState(() => _filters = res);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,12 +92,7 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
         error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(machineryListProvider)),
         data: (rows) {
           final docs = rows.fold<int>(0, (s, m) => s + m.docsExpiring);
-          final filtered = rows.where((m) {
-            if (_filter != 'all' && m.status != _filter) return false;
-            if (_q.isEmpty) return true;
-            final s = _q.toLowerCase();
-            return m.name.toLowerCase().contains(s) || m.machineCode.toLowerCase().contains(s) || m.category.toLowerCase().contains(s) || (m.make ?? '').toLowerCase().contains(s);
-          }).toList();
+          final filtered = _visible(rows);
           return Column(children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
@@ -63,7 +105,19 @@ class _MachineryScreenState extends ConsumerState<MachineryScreen> {
                 const SizedBox(height: 12),
                 ErpSearchField(hint: 'Search machine, category, make…', onChanged: (v) => setState(() => _q = v)),
                 const SizedBox(height: 10),
-                ErpFilterChips(options: buildStatusOptions(rows.map((m) => m.status)), selected: _filter, accent: _accent, onSelect: (v) => setState(() => _filter = v)),
+                FilterSortButtons(
+                  padding: EdgeInsets.zero,
+                  activeFilterCount: _filters.activeCount,
+                  onFilterTap: _openFilters,
+                  sortOptions: const [
+                    SortSpec('name', 'Name'),
+                    SortSpec('code', 'Code'),
+                  ],
+                  currentSort: _sort,
+                  onSortChanged: (s) => setState(() => _sort = s),
+                ),
+                const SizedBox(height: 10),
+                ErpFilterChips(options: buildFixedStatusOptions(_statuses, rows.map((m) => m.status)), selected: _filter, accent: _accent, onSelect: (v) => setState(() => _filter = v)),
               ]),
             ),
             Expanded(

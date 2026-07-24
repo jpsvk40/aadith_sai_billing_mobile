@@ -10,29 +10,69 @@ import '../../../widgets/common/empty_state_widget.dart';
 import '../../../widgets/common/app_card.dart';
 import '../providers/service_providers.dart';
 
-/// AMC / service contracts list (admin). Shows visit usage + expiry.
-class ServiceContractsScreen extends ConsumerWidget {
+/// AMC / service contracts list (admin). Shows visit usage + expiry, filterable by status.
+class ServiceContractsScreen extends ConsumerStatefulWidget {
   const ServiceContractsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(serviceContractsProvider);
+  ConsumerState<ServiceContractsScreen> createState() => _ServiceContractsScreenState();
+}
+
+class _ServiceContractsScreenState extends ConsumerState<ServiceContractsScreen> {
+  static const _statuses = ['All', 'ACTIVE', 'EXPIRED', 'CANCELLED', 'RENEWED'];
+  String _status = 'All';
+
+  String _label(String s) => s == 'All' ? 'All' : s[0] + s.substring(1).toLowerCase();
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(serviceContractsProvider(_status));
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('AMC Contracts')),
-      body: async.when(
-        loading: () => const LoadingIndicator(),
-        error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(serviceContractsProvider)),
-        data: (contracts) => contracts.isEmpty
-            ? const EmptyStateWidget(message: 'No contracts', icon: Icons.assignment_outlined)
-            : RefreshIndicator(
-                onRefresh: () async => ref.invalidate(serviceContractsProvider),
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: contracts.length,
-                  itemBuilder: (ctx, i) => _card(contracts[i]),
-                ),
-              ),
+      body: Column(
+        children: [
+          _statusFilter(),
+          Expanded(
+            child: async.when(
+              loading: () => const LoadingIndicator(),
+              error: (e, _) => ErrorStateWidget(message: e.toString(), onRetry: () => ref.invalidate(serviceContractsProvider(_status))),
+              data: (contracts) => contracts.isEmpty
+                  ? const EmptyStateWidget(message: 'No contracts', icon: Icons.assignment_outlined)
+                  : RefreshIndicator(
+                      onRefresh: () async => ref.invalidate(serviceContractsProvider(_status)),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: contracts.length,
+                        itemBuilder: (ctx, i) => _card(contracts[i]),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusFilter() {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: _statuses.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (ctx, i) {
+          final s = _statuses[i];
+          final selected = _status == s;
+          return ChoiceChip(
+            label: Text(_label(s)),
+            selected: selected,
+            onSelected: (_) => setState(() => _status = s),
+            selectedColor: AppColors.primaryLight,
+            labelStyle: TextStyle(color: selected ? AppColors.primaryDark : AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 12.5),
+          );
+        },
       ),
     );
   }

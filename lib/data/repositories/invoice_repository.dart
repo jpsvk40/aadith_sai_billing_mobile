@@ -9,10 +9,16 @@ class InvoiceRepository {
   Future<List<Invoice>> getInvoices({
     String? paymentStatus,
     String? search,
+    String? dateFrom,
+    String? dateTo,
+    String? financialYearId,
   }) async {
     final data = await _client.get(ApiConstants.invoices, queryParams: {
       if (paymentStatus != null) 'paymentStatus': paymentStatus,
       if (search != null && search.isNotEmpty) 'search': search,
+      if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+      if (financialYearId != null && financialYearId.isNotEmpty) 'financialYearId': financialYearId,
     });
     final list = data is Map ? (data['invoices'] ?? data['data'] ?? data) : data;
     if (list is List) {

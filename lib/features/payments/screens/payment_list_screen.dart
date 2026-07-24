@@ -5,20 +5,12 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/payment_model.dart';
+import '../../../data/providers/financial_year_provider.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/payment_list_provider.dart';
-
-const _periods = <(String, String)>[
-  ('', 'All Time'),
-  ('thisMonth', 'This Month'),
-  ('lastMonth', 'Last Month'),
-  ('last30days', 'Last 30 Days'),
-  ('last90days', 'Last 90 Days'),
-  ('thisYear', 'This Year'),
-  ('lastYear', 'Last Year'),
-];
 
 class PaymentListScreen extends ConsumerStatefulWidget {
   const PaymentListScreen({super.key, this.initialFilter});
@@ -29,6 +21,8 @@ class PaymentListScreen extends ConsumerStatefulWidget {
 
 class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
   final _searchCtrl = TextEditingController();
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
 
   @override
   void initState() {
@@ -48,13 +42,44 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
 
   List<Payment> _filtered(PaymentListState s) {
     final q = s.search.trim().toLowerCase();
-    return s.payments.where((p) {
+    var list = s.payments.where((p) {
       if (s.approvalFilter != 'All' && p.approvalStatus != s.approvalFilter) return false;
       if (q.isEmpty) return true;
       return (p.customerName ?? '').toLowerCase().contains(q) ||
           (p.invoiceNumber ?? '').toLowerCase().contains(q) ||
-          (p.referenceNo ?? '').toLowerCase().contains(q);
+          (p.referenceNo ?? '').toLowerCase().contains(q) ||
+          p.paymentMode.toLowerCase().contains(q);
     }).toList();
+    if (_sort != null) list = applySort(list, _sort!, _valueOf);
+    return list;
+  }
+
+  Comparable? _valueOf(Payment p, String key) {
+    switch (key) {
+      case 'date':
+        return (p.paymentDate ?? p.createdAt)?.millisecondsSinceEpoch;
+      case 'amount':
+        return p.amount;
+    }
+    return null;
+  }
+
+  Future<void> _openFilters() async {
+    final fyData = await ref.read(financialYearsProvider.future);
+    if (!mounted) return;
+    final result = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: true,
+      showDateRange: true,
+      financialYears: fyData.years,
+      title: 'Filter Payments',
+    );
+    if (result == null) return;
+    setState(() => _filters = result);
+    await ref
+        .read(paymentListProvider.notifier)
+        .setDateRange(result.dateFromParam, result.dateToParam, financialYearId: result.financialYearId);
   }
 
   Color _statusColor(String s) {
@@ -122,6 +147,7 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(financialYearsProvider); // kick off + cache FY list for the filter sheet
     final state = ref.watch(paymentListProvider);
     final canRecord = ref.watch(authProvider).user?.hasModule('payments') == true;
     final visible = _filtered(state);
@@ -200,26 +226,17 @@ class _PaymentListScreenState extends ConsumerState<PaymentListScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          // period
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: s.period,
-                      items: _periods.map((p) => DropdownMenuItem(value: p.$1, child: Text(p.$2, style: const TextStyle(fontSize: 14)))).toList(),
-                      onChanged: (v) => ref.read(paymentListProvider.notifier).setPeriod(v ?? ''),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          // filters (period/date range) + sort
+          FilterSortButtons(
+            padding: EdgeInsets.zero,
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            currentSort: _sort,
+            sortOptions: const [
+              SortSpec('date', 'Date'),
+              SortSpec('amount', 'Amount'),
+            ],
+            onSortChanged: (sort) => setState(() => _sort = sort),
           ),
           const SizedBox(height: 10),
           // approval chips

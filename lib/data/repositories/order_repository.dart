@@ -9,6 +9,9 @@ class OrderRepository {
   Future<List<Order>> getOrders({
     String? status,
     String? search,
+    String? dateFrom,
+    String? dateTo,
+    String? financialYearId,
     int page = 1,
     int limit = 20,
   }) async {
@@ -17,6 +20,9 @@ class OrderRepository {
       queryParams: {
         if (status != null) 'status': status,
         if (search != null && search.isNotEmpty) 'search': search,
+        if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+        if (dateTo != null && dateTo.isNotEmpty) 'dateTo': dateTo,
+        if (financialYearId != null && financialYearId.isNotEmpty) 'financialYearId': financialYearId,
         'page': page,
         'limit': limit,
       },

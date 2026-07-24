@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/customer_model.dart';
 import '../../../widgets/common/error_state_widget.dart';
+import '../../../widgets/common/list_controls.dart';
 import '../../../widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/customer_list_provider.dart';
@@ -17,6 +18,8 @@ class CustomerListScreen extends ConsumerStatefulWidget {
 
 class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   final _searchCtrl = TextEditingController();
+  ListFilterState _filters = ListFilterState();
+  SortSpec? _sort;
 
   @override
   void initState() {
@@ -30,13 +33,69 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     super.dispose();
   }
 
+  /// Distinct, non-empty, sorted values for a select filter's options.
+  List<String> _distinct(Iterable<String?> values) {
+    return values
+        .where((v) => v != null && v.trim().isNotEmpty)
+        .map((v) => v!.trim())
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  String _discountBucket(Customer c) => (c.discountPercent ?? 0) > 0 ? 'Discounted' : 'No Discount';
+
   List<Customer> _filtered(CustomerListState s) {
+    var list = s.customers;
+
+    // Client-side selects (skip when null = All).
+    final gstMode = _filters.select('gstMode');
+    if (gstMode != null) {
+      list = list.where((c) => (c.gstMode ?? '') == gstMode).toList();
+    }
+    final discount = _filters.select('discount');
+    if (discount != null) {
+      list = list.where((c) => _discountBucket(c) == discount).toList();
+    }
+
+    // Existing free-text search.
     final q = s.search.trim().toLowerCase();
-    if (q.isEmpty) return s.customers;
-    return s.customers.where((c) =>
-        c.name.toLowerCase().contains(q) ||
-        (c.phone ?? '').toLowerCase().contains(q) ||
-        (c.city ?? '').toLowerCase().contains(q)).toList();
+    if (q.isNotEmpty) {
+      list = list.where((c) =>
+          c.name.toLowerCase().contains(q) ||
+          (c.phone ?? '').toLowerCase().contains(q) ||
+          (c.city ?? '').toLowerCase().contains(q)).toList();
+    }
+
+    // Sort.
+    if (_sort != null) {
+      list = applySort<Customer>(list, _sort!, (c, key) {
+        switch (key) {
+          case 'name':
+            return c.name.toLowerCase();
+          case 'city':
+            return c.city?.toLowerCase();
+        }
+        return null;
+      });
+    }
+    return list;
+  }
+
+  Future<void> _openFilters() async {
+    final s = ref.read(customerListProvider);
+    final gstModes = _distinct(s.customers.map((c) => c.gstMode));
+    final res = await showListFilterSheet(
+      context,
+      initial: _filters,
+      showPeriods: false,
+      showDateRange: false,
+      selects: [
+        if (gstModes.isNotEmpty) SelectFilter(key: 'gstMode', label: 'GST Mode', options: gstModes),
+        const SelectFilter(key: 'discount', label: 'Discount', options: ['Discounted', 'No Discount']),
+      ],
+    );
+    if (res != null) setState(() => _filters = res);
   }
 
   Color _avatarColor(String name) {
@@ -123,6 +182,18 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          FilterSortButtons(
+            padding: EdgeInsets.zero,
+            activeFilterCount: _filters.activeCount,
+            onFilterTap: _openFilters,
+            sortOptions: const [
+              SortSpec('name', 'Name'),
+              SortSpec('city', 'City'),
+            ],
+            currentSort: _sort,
+            onSortChanged: (s) => setState(() => _sort = s),
+          ),
+          const SizedBox(height: 8),
           Text('$shown customer${shown == 1 ? '' : 's'}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
         ],

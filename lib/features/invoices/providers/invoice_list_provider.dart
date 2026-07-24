@@ -24,10 +24,10 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   final InvoiceRepository _repo;
   InvoiceListNotifier(this._repo) : super(const InvoiceListState());
 
-  Future<void> load({String? status, String? search}) async {
+  Future<void> load({String? status, String? search, String? dateFrom, String? dateTo, String? financialYearId}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final invoices = await _repo.getInvoices(paymentStatus: status, search: search);
+      final invoices = await _repo.getInvoices(paymentStatus: status, search: search, dateFrom: dateFrom, dateTo: dateTo, financialYearId: financialYearId);
       state = InvoiceListState(invoices: invoices);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
