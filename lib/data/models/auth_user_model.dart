@@ -55,6 +55,9 @@ class AuthUser {
 
   String get effectiveRole => normalizedRole.isNotEmpty ? normalizedRole : role;
   bool get isAdmin => ['super_admin', 'super_user', 'admin', 'manager'].contains(effectiveRole);
+  // Platform super admin (operates the SaaS, not a tenant). Checks both the raw and
+  // normalized role so it holds regardless of what the backend normalizes to.
+  bool get isSuperAdmin => role == 'super_admin' || normalizedRole == 'super_admin';
   bool get isSalesRep => effectiveRole == 'sales_rep';
   bool get isCollectionRep => effectiveRole == 'collection_rep';
   bool get isAccounts => effectiveRole == 'accounts';

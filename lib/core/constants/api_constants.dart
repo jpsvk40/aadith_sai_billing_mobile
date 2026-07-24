@@ -38,6 +38,14 @@ class ApiConstants {
   static const String dashboard = '/api/reports/dashboard';
   static const String dashboardEnhanced = '/api/reports/dashboard-enhanced';
 
+  // ─── Super Admin (platform) ───
+  // Platform-wide operations dashboard (super_admin only).
+  static const String platformDashboard = '/api/reports/platform-dashboard';
+  // Tenant company management (list / detail / lifecycle actions).
+  static const String companies = '/api/companies';
+  static String companyDetail(int id) => '/api/companies/$id';
+  static String companyAction(int id, String action) => '/api/companies/$id/$action';
+
   // Reference data
   static const String financialYears = '/api/financial-years';
 

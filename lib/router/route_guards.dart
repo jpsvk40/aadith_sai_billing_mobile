@@ -12,6 +12,9 @@ bool isPublicRoute(String location) {
   return _publicRoutes.contains(location);
 }
 
+/// Platform (super admin) routes live under their own shell.
+bool isSuperAdminRoute(String location) => location.startsWith('/superadmin');
+
 String? requiredModuleForLocation(String location) {
   if (location.startsWith('/orders')) return 'orders';
   if (location.startsWith('/dispatch')) return 'dispatch';
@@ -56,6 +59,11 @@ String? requiredModuleForLocation(String location) {
 
 bool canAccessLocation(AuthUser? user, String location) {
   if (user == null) return false;
+  // Platform super admin: the /superadmin shell only, nothing tenant-scoped.
+  if (user.isSuperAdmin) return isSuperAdminRoute(location);
+  // Everyone else is a tenant user and cannot reach the platform shell.
+  if (isSuperAdminRoute(location)) return false;
+
   if (location == '/dashboard' || location == '/profile') return true;
   if (user.appAccess == false) return false;
 
@@ -65,6 +73,8 @@ bool canAccessLocation(AuthUser? user, String location) {
 }
 
 String postLoginHome(AuthUser? user) {
+  // Platform super admin lands on the Control Tower, not a tenant home.
+  if (user?.isSuperAdmin == true) return '/superadmin';
   // Technicians land on their "My Day" home; everyone else on the role-aware Home.
   if (user?.isTechnician == true && user?.hasModule('warranty_service') == true) {
     return '/service/home';
@@ -116,6 +126,11 @@ String? redirectForAuthState(AuthState authState, String location) {
   }
 
   if (!canAccessLocation(user, location)) {
+    // Send a super admin who wandered onto a tenant route back to their Control
+    // Tower rather than a dead-end "unauthorized" page.
+    if (user?.isSuperAdmin == true && !isSuperAdminRoute(location)) {
+      return '/superadmin';
+    }
     return location == '/unauthorized' ? null : '/unauthorized';
   }
 

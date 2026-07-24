@@ -124,10 +124,18 @@ import '../features/procurement/screens/requisition_create_screen.dart';
 import '../features/procurement/screens/requisition_detail_screen.dart';
 import '../features/procurement/screens/rfq_detail_screen.dart';
 import '../features/procurement/screens/purchase_order_detail_screen.dart';
+// ─── Super Admin (platform) shell + screens ───
+import '../features/superadmin/widgets/super_admin_shell.dart';
+import '../features/superadmin/screens/control_tower_screen.dart';
+import '../features/superadmin/screens/companies_screen.dart';
+import '../features/superadmin/screens/company_detail_screen.dart';
+import '../features/superadmin/screens/queue_screen.dart';
+import '../features/superadmin/screens/platform_settings_screen.dart';
 import 'route_guards.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final _superAdminNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   try {
@@ -428,6 +436,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/settings/users', builder: (c, s) => const UserListScreen()),
             GoRoute(path: '/settings/users/new', builder: (c, s) => const UserFormScreen()),
             GoRoute(path: '/settings/users/:id/edit', builder: (c, s) => UserFormScreen(editUser: s.extra as AppUser?)),
+          ],
+        ),
+        // ─── Super Admin (platform) shell — separate nav, gated to super_admin by route_guards ───
+        ShellRoute(
+          navigatorKey: _superAdminNavigatorKey,
+          builder: (context, state, child) => SuperAdminShell(child: child),
+          routes: [
+            GoRoute(path: '/superadmin', builder: (c, s) => const ControlTowerScreen()),
+            GoRoute(path: '/superadmin/companies', builder: (c, s) => const CompaniesScreen()),
+            // Detail renders inside the shell (its own AppBar handles back) — same as the
+            // tenant /orders/:id pattern. Declared AFTER /superadmin/companies so 'companies'
+            // isn't captured as an :id.
+            GoRoute(
+              path: '/superadmin/companies/:id',
+              builder: (c, s) => CompanyDetailScreen(companyId: int.parse(s.pathParameters['id']!)),
+            ),
+            GoRoute(path: '/superadmin/queue', builder: (c, s) => const QueueScreen()),
+            GoRoute(path: '/superadmin/settings', builder: (c, s) => const PlatformSettingsScreen()),
           ],
         ),
       ],
