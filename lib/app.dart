@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/startup_diagnostics.dart';
+import 'core/widgets/update_gate.dart';
 import 'router/app_router.dart';
 
 class App extends ConsumerWidget {
@@ -18,6 +19,8 @@ class App extends ConsumerWidget {
         theme: AppTheme.lightTheme,
         routerConfig: router,
         debugShowCheckedModeBanner: false,
+        // Overlays the app-version gate (hard update screen / soft banner) above every route.
+        builder: (context, child) => UpdateGate(child: child ?? const SizedBox.shrink()),
       );
     } catch (e, stackTrace) {
       StartupDiagnostics.reportAsync('Router build error: $e');
