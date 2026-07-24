@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,12 @@ class _PushSettingsScreenState extends ConsumerState<PushSettingsScreen> {
   Map<String, String>? _diag;
   bool _diagLoading = false;
 
+  // The diagnostics card is a support/debug tool, not for regular users. It
+  // auto-shows in debug builds; on a release build it stays hidden until the
+  // screen title is tapped 7x (so support can walk a user to it). Session-only.
+  bool _diagUnlocked = kDebugMode;
+  int _diagTapCount = 0;
+
   static const _diagLabels = {
     'firebase': 'Firebase',
     'platform': 'Platform',
@@ -38,7 +45,7 @@ class _PushSettingsScreenState extends ConsumerState<PushSettingsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationPrefsProvider.notifier).load();
-      _loadDiag();
+      if (_diagUnlocked) _loadDiag();
     });
   }
 
@@ -50,6 +57,17 @@ class _PushSettingsScreenState extends ConsumerState<PushSettingsScreen> {
       _diag = d;
       _diagLoading = false;
     });
+  }
+
+  /// Reveal the diagnostics card on a release build after 7 title taps.
+  void _onTitleTap() {
+    if (_diagUnlocked) return;
+    _diagTapCount++;
+    if (_diagTapCount >= 7) {
+      setState(() => _diagUnlocked = true);
+      _loadDiag();
+      _snack('Push diagnostics unlocked.');
+    }
   }
 
   /// Whether a diagnostic value indicates a problem (renders red).
@@ -90,10 +108,16 @@ class _PushSettingsScreenState extends ConsumerState<PushSettingsScreen> {
     final n = ref.read(notificationPrefsProvider.notifier);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Notification Settings')),
+      appBar: AppBar(
+        title: GestureDetector(
+          onTap: _onTitleTap,
+          behavior: HitTestBehavior.opaque,
+          child: const Text('Notification Settings'),
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await _loadDiag();
+          if (_diagUnlocked) await _loadDiag();
           await n.load();
         },
         child: ListView(
@@ -101,8 +125,10 @@ class _PushSettingsScreenState extends ConsumerState<PushSettingsScreen> {
           children: [
             _infoBanner(),
             const SizedBox(height: 16),
-            _diagnosticsCard(),
-            const SizedBox(height: 20),
+            if (_diagUnlocked) ...[
+              _diagnosticsCard(),
+              const SizedBox(height: 20),
+            ],
             ...async.when<List<Widget>>(
               loading: () => const [
                 Padding(
